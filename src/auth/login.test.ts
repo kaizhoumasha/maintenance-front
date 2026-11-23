@@ -5,7 +5,7 @@ describe("submitLogin", () => {
   it("stores the access token from a successful login", async () => {
     const request = vi.fn(async () => ({ access_token: "abc", token_type: "bearer" }))
     let token: string | null = null
-    await submitLogin({ request }, { username: "admin", password: "secret" }, {
+    await submitLogin({ request: request as Parameters<typeof submitLogin>[0]["request"] }, { username: "admin", password: "secret" }, {
       getAccessToken: () => token,
       setAccessToken: (next) => {
         token = next
