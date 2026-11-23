@@ -1,3 +1,13 @@
+<script setup lang="ts">
+import RangePager from "@/components/list/RangePager.vue"
+import { useRowRange } from "@/components/list/useRowRange"
+
+const { range, replaceRange } = useRowRange()
+</script>
+
 <template>
-  <h1>用户管理</h1>
+  <section>
+    <h1>用户管理</h1>
+    <RangePager :range="range" :total="0" @change="replaceRange" />
+  </section>
 </template>
