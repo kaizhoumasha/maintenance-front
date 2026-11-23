@@ -26,16 +26,25 @@ async function readError(response: Response): Promise<HttpError> {
   return new HttpError(response.status, body, response.headers.get("retry-after"))
 }
 
-export function createApiClient(options: { fetchFn?: typeof fetch; token: TokenSource }) {
+export function createApiClient(options: {
+  fetchFn?: typeof fetch
+  token: TokenSource
+  onUnauthorized?: () => void | Promise<void>
+}) {
   const fetchFn = options.fetchFn ?? fetch
   let refreshing: Promise<string> | null = null
+
+  async function invalidate() {
+    options.token.setAccessToken(null)
+    await options.onUnauthorized?.()
+  }
 
   async function refresh(): Promise<string> {
     if (refreshing) return refreshing
     refreshing = (async () => {
       const response = await fetchFn(REFRESH_PATH, { method: "POST", credentials: "include" })
       if (!response.ok) {
-        options.token.setAccessToken(null)
+        await invalidate()
         throw await readError(response)
       }
       const pair = (await response.json()) as TokenPair
@@ -64,6 +73,10 @@ export function createApiClient(options: { fetchFn?: typeof fetch; token: TokenS
     if (response.status === 401 && !skipRefresh && options.token.getAccessToken()) {
       await refresh()
       response = await send(options.token.getAccessToken())
+      if (response.status === 401) {
+        await invalidate()
+        throw await readError(response)
+      }
     }
     if (!response.ok) throw await readError(response)
     if (response.status === 204) return undefined as T

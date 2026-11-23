@@ -1,6 +1,16 @@
 import { defineStore } from "pinia"
 import { ref } from "vue"
 
+const identityListeners = new Set<() => void>()
+
+export function onAccessTokenIdentityChange(listener: () => void) {
+  identityListeners.add(listener)
+}
+
+function emitAccessTokenIdentityChange() {
+  for (const listener of identityListeners) listener()
+}
+
 export const useSessionStore = defineStore("session", () => {
   const accessToken = ref<string | null>(null)
   const permissions = ref<string[]>([])
@@ -11,6 +21,13 @@ export const useSessionStore = defineStore("session", () => {
   }
 
   function setAccessToken(token: string | null) {
+    if (accessToken.value === token) return
+    accessToken.value = token
+    permissions.value = []
+    emitAccessTokenIdentityChange()
+  }
+
+  function rotateAccessToken(token: string) {
     accessToken.value = token
   }
 
@@ -23,9 +40,21 @@ export const useSessionStore = defineStore("session", () => {
   }
 
   function reset() {
+    const changed = accessToken.value !== null || permissions.value.length > 0
     accessToken.value = null
     permissions.value = []
+    if (changed) emitAccessTokenIdentityChange()
   }
 
-  return { accessToken, permissions, sidebarCollapsed, getAccessToken, setAccessToken, setPermissions, hasPermission, reset }
+  return {
+    accessToken,
+    permissions,
+    sidebarCollapsed,
+    getAccessToken,
+    setAccessToken,
+    rotateAccessToken,
+    setPermissions,
+    hasPermission,
+    reset,
+  }
 })
