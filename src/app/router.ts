@@ -34,7 +34,9 @@ export async function installMenus() {
 
 router.beforeEach(async (to) => {
   if (to.meta.public) return true
+  const menusWereInstalled = installed
   await installMenus()
   if (!useSessionStore().getAccessToken()) return { path: "/login" }
+  if (!menusWereInstalled && installed) return to.fullPath
   return true
 })
