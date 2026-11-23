@@ -41,7 +41,8 @@ describe("row range", () => {
   })
 
   it("refuses an offset past 100000", () => {
-    expect(canRequest({ start: 100001, end: 100020 })).toBe(false)
+    expect(canRequest({ start: 100001, end: 100020 })).toBe(true)
+    expect(canRequest({ start: 100002, end: 100021 })).toBe(false)
     expect(canRequest({ start: 99991, end: 100010 })).toBe(true)
   })
 })

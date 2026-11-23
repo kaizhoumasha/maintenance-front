@@ -17,7 +17,7 @@ export function windowLength(range: RowRange): number {
 
 export function canRequest(range: RowRange): boolean {
   const length = windowLength(range)
-  return integers(range) && range.start >= 1 && length >= 1 && length <= MAX_WINDOW && range.start <= MAX_OFFSET
+  return integers(range) && range.start >= 1 && length >= 1 && length <= MAX_WINDOW && range.start - 1 <= MAX_OFFSET
 }
 
 function parseDraft(value: string): number | null {
