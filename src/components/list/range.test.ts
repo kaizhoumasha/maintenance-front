@@ -24,6 +24,7 @@ describe("row range", () => {
     expect(applyDraft(DEFAULT_RANGE, { start: "30", end: "15" }, 128)).toEqual(DEFAULT_RANGE)
     expect(applyDraft(DEFAULT_RANGE, { start: "", end: "20" }, 128)).toEqual(DEFAULT_RANGE)
     expect(applyDraft(DEFAULT_RANGE, { start: "1", end: "101" }, 500)).toEqual(DEFAULT_RANGE)
+    expect(applyDraft(DEFAULT_RANGE, { start: "1", end: "120" }, 45)).toEqual(DEFAULT_RANGE)
   })
 
   it("moves by the current window and shortens at the edges", () => {
