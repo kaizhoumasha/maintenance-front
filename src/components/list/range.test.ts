@@ -46,4 +46,20 @@ describe("row range", () => {
     expect(canRequest({ start: 100002, end: 100021 })).toBe(false)
     expect(canRequest({ start: 99991, end: 100010 })).toBe(true)
   })
+
+  // Value: protects=rangeFromQuery uses the default window when the query is not requestable, and fills a missing side from rows 1 through 20; fails_when=the canRequest fallback or the default fill is removed; why_new=the existing default test only passes an empty query; seam=none; no_claim=the browser address bar (pure function of the query object)
+  it("falls back when the query is not a requestable window", () => {
+    expect(rangeFromQuery({ start: "abc", end: "10" })).toEqual(DEFAULT_RANGE)
+    expect(rangeFromQuery({ start: "30", end: "10" })).toEqual(DEFAULT_RANGE)
+    expect(rangeFromQuery({ start: "1", end: "101" })).toEqual(DEFAULT_RANGE)
+    expect(rangeFromQuery({ start: "100002", end: "100021" })).toEqual(DEFAULT_RANGE)
+    expect(rangeFromQuery({ start: "5" })).toEqual({ start: 5, end: 20 })
+    expect(rangeFromQuery({ end: "10" })).toEqual({ start: 1, end: 10 })
+  })
+
+  // Value: protects=a legal draft whose end or start passes total is shortened to total; fails_when=the total clamp is removed and the oversize end is kept; why_new=the invalid-draft test uses a window longer than 100, which fails before the clamp; seam=none; no_claim=pager input wiring
+  it("shortens a legal draft whose end or start passes the total", () => {
+    expect(applyDraft({ start: 1, end: 20 }, { start: "1", end: "30" }, 25)).toEqual({ start: 1, end: 25 })
+    expect(applyDraft({ start: 1, end: 20 }, { start: "30", end: "40" }, 25)).toEqual({ start: 25, end: 25 })
+  })
 })
