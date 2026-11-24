@@ -15,6 +15,17 @@ export const router = createRouter({
   ],
 })
 
+const RESERVED_ROUTE_NAMES = new Set(["Login", "Root"])
+
+function withoutReservedNames(routes: readonly RouteRecordRaw[]): RouteRecordRaw[] {
+  return routes.map((route) => {
+    const next = { ...route }
+    if (typeof next.name === "string" && RESERVED_ROUTE_NAMES.has(next.name)) delete next.name
+    if (next.children) next.children = withoutReservedNames(next.children)
+    return next
+  })
+}
+
 function collectRouteNames(routes: readonly RouteRecordRaw[]): string[] {
   const names: string[] = []
   for (const route of routes) {
@@ -45,13 +56,17 @@ export async function installMenus() {
       return
     }
   }
-  const me = await getApi().request<{ permissions: string[] }>("/api/v1/users/me")
-  session.setPermissions(me.permissions)
-  const menus = await getApi().request<MenuNode[]>("/api/v1/users/me/menus")
-  const compiled = compileMenus(menus)
-  for (const route of compiled) router.addRoute("Root", route)
-  installedRouteNames.push(...collectRouteNames(compiled))
-  installed = true
+  try {
+    const me = await getApi().request<{ permissions: string[] }>("/api/v1/users/me")
+    session.setPermissions(me.permissions)
+    const menus = await getApi().request<MenuNode[]>("/api/v1/users/me/menus")
+    const compiled = withoutReservedNames(compileMenus(menus))
+    for (const route of compiled) router.addRoute("Root", route)
+    installedRouteNames.push(...collectRouteNames(compiled))
+    installed = true
+  } catch {
+    session.reset()
+  }
 }
 
 router.beforeEach(async (to) => {

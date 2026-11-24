@@ -15,8 +15,9 @@ export function compileMenus(nodes: MenuNode[]): RouteRecordRaw[] {
         children: children ?? [],
       }
     }
-    const loader =
-      node.component in viewLoaders ? viewLoaders[node.component as keyof typeof viewLoaders] : undefined
+    const loader = Object.hasOwn(viewLoaders, node.component)
+      ? viewLoaders[node.component as keyof typeof viewLoaders]
+      : undefined
     const route = {
       name: node.name,
       path: node.path,
