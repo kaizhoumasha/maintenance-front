@@ -176,4 +176,22 @@ describe("router beforeEach", () => {
     expect(router.currentRoute.value.name).toBe("Login")
     expect(router.currentRoute.value.path).toBe("/login")
   })
+
+  // Value: protects=a top-level menu named Login is removed when the session resets and does not stay open for the next user; fails_when=deleting the reserved name leaves an unnamed route that discardInstalledMenus cannot remove; why_new=the reserved-name test never resets the session; seam=none; no_claim=the menu payload comes from the API (menus are stubbed)
+  it("removes a top-level menu that reused Login when the session resets", async () => {
+    apiState.menus = [
+      {
+        name: "Login",
+        path: "/system/alias",
+        component: "system/user/index",
+        meta: { title: "撞名登录" },
+      },
+    ]
+    await router.push("/system/alias")
+    expect(router.currentRoute.value.path).toBe("/system/alias")
+    expect(router.resolve("/login").name).toBe("Login")
+    useSessionStore().reset()
+    expect(router.resolve("/system/alias").matched).toEqual([])
+    expect(router.resolve("/login").name).toBe("Login")
+  })
 })

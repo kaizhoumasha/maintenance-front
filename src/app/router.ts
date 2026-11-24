@@ -5,7 +5,7 @@ import { compileMenus } from "@/menus/compile"
 import type { MenuNode } from "@/menus/types"
 
 let installed = false
-const installedRouteNames: string[] = []
+const installedRouteRemovers: Array<() => void> = []
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -26,21 +26,10 @@ function withoutReservedNames(routes: readonly RouteRecordRaw[]): RouteRecordRaw
   })
 }
 
-function collectRouteNames(routes: readonly RouteRecordRaw[]): string[] {
-  const names: string[] = []
-  for (const route of routes) {
-    if (typeof route.name === "string") names.push(route.name)
-    if (route.children) names.push(...collectRouteNames(route.children))
-  }
-  return names
-}
-
 export function discardInstalledMenus() {
   installed = false
-  const names = installedRouteNames.splice(0).reverse()
-  for (const name of names) {
-    if (router.hasRoute(name)) router.removeRoute(name)
-  }
+  const removers = installedRouteRemovers.splice(0)
+  for (const remove of removers) remove()
 }
 
 onAccessTokenIdentityChange(discardInstalledMenus)
@@ -61,8 +50,7 @@ export async function installMenus() {
     session.setPermissions(me.permissions)
     const menus = await getApi().request<MenuNode[]>("/api/v1/users/me/menus")
     const compiled = withoutReservedNames(compileMenus(menus))
-    for (const route of compiled) router.addRoute("Root", route)
-    installedRouteNames.push(...collectRouteNames(compiled))
+    for (const route of compiled) installedRouteRemovers.push(router.addRoute("Root", route))
     installed = true
   } catch {
     session.reset()
