@@ -15,15 +15,35 @@ export class HttpError extends Error {
 export interface TokenSource {
   getAccessToken(): string | null
   setAccessToken(token: string | null): void
+  getEpoch?(): number
 }
 
 type RequestOptions = RequestInit & { skipRefresh?: boolean }
 
 const REFRESH_PATH = "/api/v1/auth/refresh"
+const LOGOUT_PATH = "/api/v1/auth/logout"
+
+function fallbackError(response: Response): HttpError {
+  return new HttpError(
+    response.status,
+    {
+      trace_id: "",
+      code: response.status === 401 ? "UNAUTHORIZED" : "UNAVAILABLE",
+      message: response.status === 401 ? "未登录" : "暂时不可用",
+      detail: null,
+    },
+    response.headers.get("retry-after"),
+  )
+}
 
 async function readError(response: Response): Promise<HttpError> {
-  const body = (await response.json()) as ErrorBody
-  return new HttpError(response.status, body, response.headers.get("retry-after"))
+  try {
+    const body = (await response.json()) as ErrorBody
+    if (typeof body?.message === "string") return new HttpError(response.status, body, response.headers.get("retry-after"))
+  } catch {
+    // A gateway page or an empty body still has to keep its HTTP status.
+  }
+  return fallbackError(response)
 }
 
 export function createApiClient(options: {
@@ -39,15 +59,37 @@ export function createApiClient(options: {
     await options.onUnauthorized?.()
   }
 
+  function clearedSession() {
+    return new HttpError(401, { trace_id: "", code: "UNAUTHORIZED", message: "未登录", detail: null }, null)
+  }
+
   async function refresh(): Promise<string> {
     if (refreshing) return refreshing
+    const startedEpoch = options.token.getEpoch?.()
+    const startedToken = options.token.getAccessToken()
     refreshing = (async () => {
       const response = await fetchFn(REFRESH_PATH, { method: "POST", credentials: "include" })
       if (!response.ok) {
+        const error = await readError(response)
+        const epoch = options.token.getEpoch?.()
+        const current = options.token.getAccessToken()
+        if ((startedEpoch !== undefined && epoch !== startedEpoch) || current !== startedToken || error.status !== 401) {
+          throw error
+        }
         await invalidate()
-        throw await readError(response)
+        throw error
       }
       const pair = (await response.json()) as TokenPair
+      const epoch = options.token.getEpoch?.()
+      const current = options.token.getAccessToken()
+      if ((startedEpoch !== undefined && epoch !== startedEpoch) || current !== startedToken) {
+        await fetchFn(LOGOUT_PATH, {
+          method: "POST",
+          credentials: "include",
+          headers: { authorization: `Bearer ${pair.access_token}` },
+        }).catch(() => undefined)
+        throw clearedSession()
+      }
       options.token.setAccessToken(pair.access_token)
       return pair.access_token
     })().finally(() => {
@@ -72,10 +114,16 @@ export function createApiClient(options: {
     let response = await send(options.token.getAccessToken())
     if (response.status === 401 && !skipRefresh && options.token.getAccessToken()) {
       await refresh()
-      response = await send(options.token.getAccessToken())
+      const startedEpoch = options.token.getEpoch?.()
+      const startedToken = options.token.getAccessToken()
+      response = await send(startedToken)
       if (response.status === 401) {
+        const error = await readError(response)
+        const epoch = options.token.getEpoch?.()
+        const current = options.token.getAccessToken()
+        if ((startedEpoch !== undefined && epoch !== startedEpoch) || current !== startedToken) throw error
         await invalidate()
-        throw await readError(response)
+        throw error
       }
     }
     if (!response.ok) throw await readError(response)
@@ -83,5 +131,9 @@ export function createApiClient(options: {
     return (await response.json()) as T
   }
 
-  return { request, refresh }
+  function whenSettled(): Promise<void> {
+    return refreshing?.then(() => undefined, () => undefined) ?? Promise.resolve()
+  }
+
+  return { request, refresh, whenSettled }
 }

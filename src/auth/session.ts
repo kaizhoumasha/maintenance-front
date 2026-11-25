@@ -15,13 +15,19 @@ export const useSessionStore = defineStore("session", () => {
   const accessToken = ref<string | null>(null)
   const permissions = ref<string[]>([])
   const sidebarCollapsed = ref(false)
+  let epoch = 0
 
   function getAccessToken() {
     return accessToken.value
   }
 
+  function getEpoch() {
+    return epoch
+  }
+
   function setAccessToken(token: string | null) {
     if (accessToken.value === token) return
+    epoch += 1
     accessToken.value = token
     permissions.value = []
     emitAccessTokenIdentityChange()
@@ -41,9 +47,11 @@ export const useSessionStore = defineStore("session", () => {
 
   function reset() {
     const changed = accessToken.value !== null || permissions.value.length > 0
+    if (!changed) return
+    epoch += 1
     accessToken.value = null
     permissions.value = []
-    if (changed) emitAccessTokenIdentityChange()
+    emitAccessTokenIdentityChange()
   }
 
   return {
@@ -51,6 +59,7 @@ export const useSessionStore = defineStore("session", () => {
     permissions,
     sidebarCollapsed,
     getAccessToken,
+    getEpoch,
     setAccessToken,
     rotateAccessToken,
     setPermissions,

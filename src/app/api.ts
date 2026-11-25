@@ -1,5 +1,11 @@
 import { createApiClient, type TokenSource } from "@/api/client"
-import { useSessionStore } from "@/auth/session"
+import { queryClient } from "@/app/query"
+import { onAccessTokenIdentityChange, useSessionStore } from "@/auth/session"
+import { sameAccessTokenSubject } from "@/auth/tokenSubject"
+
+onAccessTokenIdentityChange(() => {
+  queryClient.clear()
+})
 
 let client: ReturnType<typeof createApiClient> | null = null
 let unauthorizedHandler: (() => void | Promise<void>) | null = null
@@ -12,9 +18,11 @@ export function sessionTokenSource(): TokenSource {
   const session = useSessionStore()
   return {
     getAccessToken: () => session.getAccessToken(),
+    getEpoch: () => session.getEpoch(),
     setAccessToken: (value) => {
-      if (value === null) session.setAccessToken(null)
-      else session.rotateAccessToken(value)
+      const current = session.getAccessToken()
+      if (value !== null && current !== null && sameAccessTokenSubject(current, value)) session.rotateAccessToken(value)
+      else session.setAccessToken(value)
     },
   }
 }

@@ -45,4 +45,35 @@ describe("LoginView", () => {
     expect(router.currentRoute.value.path).toBe("/login")
     expect(submitLogin).toHaveBeenCalledTimes(2)
   })
+
+  // Value: protects=a second submit while login is in flight is ignored, then success opens /; fails_when=the pending guard is removed or success does not navigate home; why_new=LoginView.test only submits again after an error has settled; seam=none; no_claim=the auth endpoint (submitLogin is mocked)
+  it("ignores a second submit while login is in flight, then opens home", async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: "/login", component: { template: "<div />" } },
+        { path: "/", component: { template: "<div />" } },
+      ],
+    })
+    await router.push("/login")
+    let release: () => void = () => undefined
+    const pending = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    submitLogin.mockReset()
+    submitLogin.mockImplementation(() => pending)
+    const wrapper = mount(LoginView, { global: { plugins: [createPinia(), router] } })
+    await wrapper.get("input[name=username]").setValue("admin")
+    await wrapper.get("input[name=password]").setValue("secret")
+    const inflight = wrapper.get("form").trigger("submit")
+    await wrapper.vm.$nextTick()
+    expect(submitLogin).toHaveBeenCalledTimes(1)
+    expect(wrapper.get("button[type=submit]").element.hasAttribute("disabled")).toBe(true)
+    await wrapper.get("form").trigger("submit")
+    expect(submitLogin).toHaveBeenCalledTimes(1)
+    release()
+    await inflight
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe("/")
+  })
 })

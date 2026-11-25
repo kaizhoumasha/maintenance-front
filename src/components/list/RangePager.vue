@@ -24,12 +24,12 @@ function commit() {
 </script>
 
 <template>
-  <div class="flex items-center gap-2 text-sm">
-    <input data-testid="range-start" v-model="start" class="w-14 border-b text-center" @blur="commit" @keydown.enter="commit" />
+  <div class="flex flex-wrap items-center gap-x-3 gap-y-2 font-mono text-[13px] text-oxide">
+    <input data-testid="range-start" aria-label="起始行" v-model="start" class="w-14 border-0 border-b border-rule bg-transparent text-center text-ink" @blur="commit" @keydown.enter="commit" />
     <span>-</span>
-    <input data-testid="range-end" v-model="end" class="w-14 border-b text-center" @blur="commit" @keydown.enter="commit" />
+    <input data-testid="range-end" aria-label="结束行" v-model="end" class="w-14 border-0 border-b border-rule bg-transparent text-center text-ink" @blur="commit" @keydown.enter="commit" />
     <span>共 {{ total }} 条</span>
-    <button type="button" data-testid="previous-window" :disabled="range.start <= 1" @click="emit('change', previousWindow(range))">上一窗</button>
-    <button type="button" data-testid="next-window" :disabled="range.end >= total" @click="emit('change', nextWindow(range, total))">下一窗</button>
+    <button type="button" class="text-ink disabled:opacity-40" data-testid="previous-window" :disabled="range.start <= 1" @click="emit('change', previousWindow(range))">上一窗</button>
+    <button type="button" class="text-ink disabled:opacity-40" data-testid="next-window" :disabled="range.end >= total" @click="emit('change', nextWindow(range, total))">下一窗</button>
   </div>
 </template>

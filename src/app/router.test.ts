@@ -24,27 +24,50 @@ const apiState = vi.hoisted(() => {
     meCalls: 0,
     menuCalls: 0,
     refreshCalls: 0,
+    refreshSucceeds: false,
+    onRefreshSuccess: null as (() => void) | null,
     meReject: false,
     menuReject: false,
+    meStatus: null as number | null,
+    meHold: null as Promise<void> | null,
+    refreshHold: null as Promise<void> | null,
+    menuHold: null as Promise<void> | null,
   }
 })
 
 vi.mock("@/app/api", () => ({
   getApi: () => ({
-    refresh: () => {
+    refresh: async () => {
       apiState.refreshCalls += 1
-      return Promise.reject(new Error("offline"))
+      if (apiState.refreshHold) await apiState.refreshHold
+      if (apiState.refreshSucceeds) {
+        apiState.onRefreshSuccess?.()
+        return "refreshed"
+      }
+      throw new Error("offline")
     },
-    request: (path: string) => {
+    request: async (path: string) => {
       if (path === "/api/v1/users/me") {
         apiState.meCalls += 1
-        if (apiState.meReject) return Promise.reject(new Error("profile down"))
-        return Promise.resolve({ permissions: [...apiState.permissions] })
+        const permissions = [...apiState.permissions]
+        if (apiState.meHold) await apiState.meHold
+        if (apiState.meStatus) {
+          const { HttpError } = await import("@/api/client")
+          throw new HttpError(
+            apiState.meStatus,
+            { trace_id: "t", code: "RATE_LIMIT", message: "请求过多", detail: null },
+            "12",
+          )
+        }
+        if (apiState.meReject) throw new Error("profile down")
+        return { permissions }
       }
       if (path === "/api/v1/users/me/menus") {
         apiState.menuCalls += 1
-        if (apiState.menuReject) return Promise.reject(new Error("menus down"))
-        return Promise.resolve(apiState.menus)
+        const menus = apiState.menus
+        if (apiState.menuHold) await apiState.menuHold
+        if (apiState.menuReject) throw new Error("menus down")
+        return menus
       }
       return Promise.reject(new Error(`unexpected ${path}`))
     },
@@ -58,8 +81,14 @@ describe("router beforeEach", () => {
     apiState.meCalls = 0
     apiState.menuCalls = 0
     apiState.refreshCalls = 0
+    apiState.refreshSucceeds = false
+    apiState.onRefreshSuccess = null
     apiState.meReject = false
     apiState.menuReject = false
+    apiState.meStatus = null
+    apiState.meHold = null
+    apiState.refreshHold = null
+    apiState.menuHold = null
     setActivePinia(createPinia())
     useSessionStore().setAccessToken("token")
   })
@@ -70,6 +99,54 @@ describe("router beforeEach", () => {
 
     await router.push("/asset/workline")
     expect(router.currentRoute.value.name).toBe("AssetWorkline")
+  })
+
+  // Value: protects=a later navigation does not request the profile or menus again; fails_when=the installed guard is removed and every visit refetches; why_new=the rematch test only checks the route name; seam=none; no_claim=the profile payload (getApi is mocked)
+  it("does not request the profile again once menus are installed", async () => {
+    await router.push("/asset/device")
+    expect(apiState.meCalls).toBe(1)
+    expect(apiState.menuCalls).toBe(1)
+    await router.push("/asset/workline")
+    expect(apiState.meCalls).toBe(1)
+    expect(apiState.menuCalls).toBe(1)
+    expect(router.currentRoute.value.name).toBe("AssetWorkline")
+  })
+
+  // Value: protects=an anonymous visit stays on the page when refresh succeeds and menus install; fails_when=a resolved refresh still sends the visitor to login or skips the menu request; why_new=router tests only reject refresh; seam=none; no_claim=the refresh cookie (getApi is mocked and sets the token)
+  it("opens the requested page when an anonymous refresh succeeds", async () => {
+    useSessionStore().setAccessToken(null)
+    await router.push("/login")
+    apiState.refreshSucceeds = true
+    apiState.onRefreshSuccess = () => {
+      useSessionStore().rotateAccessToken("refreshed")
+    }
+    apiState.meCalls = 0
+    apiState.menuCalls = 0
+    apiState.refreshCalls = 0
+    await router.push("/asset/device")
+    expect(apiState.refreshCalls).toBe(1)
+    expect(apiState.meCalls).toBe(1)
+    expect(apiState.menuCalls).toBe(1)
+    expect(useSessionStore().getAccessToken()).toBe("refreshed")
+    expect(useSessionStore().permissions).toEqual(["asset:read"])
+    expect(router.currentRoute.value.name).toBe("AssetDevice")
+  })
+
+  // Value: protects=a profile that returns after the access token changed does not overwrite the new session; fails_when=setPermissions writes the old profile onto the replacement token; why_new=router tests change the token only after menus are already installed; seam=none; no_claim=two live users (the profile response is held in the mock)
+  it("does not apply a profile that returns after the session identity changes", async () => {
+    let release: () => void = () => undefined
+    apiState.meHold = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const pending = router.push("/asset/device")
+    await vi.waitFor(() => expect(apiState.meCalls).toBe(1))
+    apiState.permissions = ["user:read"]
+    useSessionStore().setAccessToken("other")
+    release()
+    await pending
+    expect(useSessionStore().getAccessToken()).toBe("other")
+    expect(useSessionStore().permissions).toEqual(["user:read"])
+    expect(apiState.meCalls).toBe(2)
   })
 
   it("drops the previous user's permission codes and dynamic routes after a second login", async () => {
@@ -193,5 +270,63 @@ describe("router beforeEach", () => {
     useSessionStore().reset()
     expect(router.resolve("/system/alias").matched).toEqual([])
     expect(router.resolve("/login").name).toBe("Login")
+  })
+
+  // Value: protects=a failed anonymous refresh does not clear a session that signed in while it was in flight; fails_when=refresh failure always calls reset; why_new=the anonymous failure test never changes identity during refresh; seam=none; no_claim=the refresh cookie (getApi is mocked)
+  it("does not clear a session that signs in while anonymous refresh fails", async () => {
+    useSessionStore().setAccessToken(null)
+    await router.push("/login")
+    let release: () => void = () => undefined
+    apiState.refreshHold = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    apiState.meCalls = 0
+    apiState.menuCalls = 0
+    apiState.refreshCalls = 0
+    const pending = router.push("/asset/device")
+    await vi.waitFor(() => expect(apiState.refreshCalls).toBe(1))
+    useSessionStore().setAccessToken("newer")
+    release()
+    await pending
+    expect(useSessionStore().getAccessToken()).toBe("newer")
+    expect(useSessionStore().permissions).toEqual(["asset:read"])
+    expect(router.currentRoute.value.name).toBe("AssetDevice")
+    expect(apiState.meCalls).toBe(1)
+    expect(apiState.menuCalls).toBe(1)
+  })
+
+  // Value: protects=menus that return after the access token changes are not installed for the new session; fails_when=the epoch check after the menu request is removed; why_new=the profile race changes identity before menus are requested; seam=none; no_claim=the menu payload (getApi is mocked)
+  it("does not install menus that return after the session identity changes", async () => {
+    let release: () => void = () => undefined
+    apiState.menuHold = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const pending = router.push("/asset/device")
+    await vi.waitFor(() => expect(apiState.menuCalls).toBe(1))
+    apiState.permissions = ["user:read"]
+    useSessionStore().setAccessToken("other")
+    release()
+    await pending
+    expect(useSessionStore().getAccessToken()).toBe("other")
+    expect(useSessionStore().permissions).toEqual(["user:read"])
+    expect(apiState.meCalls).toBe(2)
+    expect(apiState.menuCalls).toBe(2)
+    expect(router.currentRoute.value.name).toBe("AssetDevice")
+  })
+
+  it("keeps the session when menu install sees a non-401 error and still clears on 401", async () => {
+    await router.push("/")
+    expect(router.currentRoute.value.path).toBe("/")
+    useSessionStore().setAccessToken(null)
+    useSessionStore().setAccessToken("token")
+    apiState.meStatus = 429
+    await expect(router.push("/asset/device")).rejects.toMatchObject({ status: 429 })
+    expect(useSessionStore().getAccessToken()).toBe("token")
+    expect(router.currentRoute.value.path).toBe("/")
+
+    apiState.meStatus = 401
+    await router.push("/asset/device")
+    expect(useSessionStore().getAccessToken()).toBeNull()
+    expect(router.currentRoute.value.path).toBe("/login")
   })
 })

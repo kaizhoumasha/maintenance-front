@@ -30,6 +30,8 @@ describe("row range", () => {
   it("moves by the current window and shortens at the edges", () => {
     expect(previousWindow({ start: 21, end: 40 })).toEqual({ start: 1, end: 20 })
     expect(previousWindow({ start: 11, end: 20 })).toEqual({ start: 1, end: 10 })
+    expect(previousWindow({ start: 5, end: 20 })).toEqual({ start: 1, end: 4 })
+    expect(previousWindow({ start: 1, end: 20 })).toEqual({ start: 1, end: 20 })
     expect(nextWindow({ start: 1, end: 20 }, 45)).toEqual({ start: 21, end: 40 })
     expect(nextWindow({ start: 21, end: 40 }, 45)).toEqual({ start: 41, end: 45 })
     expect(nextWindow({ start: 1, end: 20 }, 20)).toEqual({ start: 1, end: 20 })

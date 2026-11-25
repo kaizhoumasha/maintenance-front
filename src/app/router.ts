@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router"
+import { HttpError } from "@/api/client"
 import { getApi } from "@/app/api"
 import { onAccessTokenIdentityChange, useSessionStore } from "@/auth/session"
 import { compileMenus } from "@/menus/compile"
@@ -35,25 +36,34 @@ export function discardInstalledMenus() {
 onAccessTokenIdentityChange(discardInstalledMenus)
 
 export async function installMenus() {
-  if (installed) return
   const session = useSessionStore()
-  if (!session.getAccessToken()) {
+  while (!installed) {
+    const epoch = session.getEpoch()
+    if (!session.getAccessToken()) {
+      try {
+        await getApi().refresh()
+      } catch {
+        if (session.getEpoch() !== epoch) continue
+        session.reset()
+        return
+      }
+    }
+    if (session.getEpoch() !== epoch) continue
     try {
-      await getApi().refresh()
-    } catch {
+      const me = await getApi().request<{ permissions: string[] }>("/api/v1/users/me")
+      if (session.getEpoch() !== epoch) continue
+      const menus = await getApi().request<MenuNode[]>("/api/v1/users/me/menus")
+      if (session.getEpoch() !== epoch) continue
+      session.setPermissions(me.permissions)
+      const compiled = withoutReservedNames(compileMenus(menus))
+      for (const route of compiled) installedRouteRemovers.push(router.addRoute("Root", route))
+      installed = true
+    } catch (error) {
+      if (session.getEpoch() !== epoch) continue
+      if (error instanceof HttpError && error.status !== 401) throw error
       session.reset()
       return
     }
-  }
-  try {
-    const me = await getApi().request<{ permissions: string[] }>("/api/v1/users/me")
-    session.setPermissions(me.permissions)
-    const menus = await getApi().request<MenuNode[]>("/api/v1/users/me/menus")
-    const compiled = withoutReservedNames(compileMenus(menus))
-    for (const route of compiled) installedRouteRemovers.push(router.addRoute("Root", route))
-    installed = true
-  } catch {
-    session.reset()
   }
 }
 
