@@ -18,6 +18,7 @@
 - 错误体为 `trace_id`、`code`、`message`、`detail`。页面展示 `message`。
 - `401` 时用刷新 cookie 换一次令牌并重试原请求。同一时刻只刷新一次。刷新失败清空会话并进入登录页。
 - 登录请求本身返回 `401` 时不尝试刷新。
+- 退出时先 `whenSettled()` 等待进行中的刷新。仅当仍是同一账号（JWT `sub`）时才 `POST /api/v1/auth/logout`；刷新期间账号已变时只清本地会话。
 - `component` 为 `Layout` 的菜单节点是目录。其余字符串对应 `src/views/`。找不到组件时显示「页面未实现」。`meta.hidden` 的路由仍注册。
 - 本计划不实现工作线、设备、用户、角色、权限、菜单编辑和审计的业务表单。这些页面先显示标题，后续计划替换。
 
@@ -1312,5 +1313,5 @@ EOF
 ## Self-check
 
 - 规格第 6 节的业务表单不在本计划的任务里。它们属于文首列出的四份后续计划。
-- 运行 `pnpm test` 必须覆盖 `ready`、`range`、`RangePager`、`client`、`login`、`compileMenus`、`useRowRange`。
+- 运行 `pnpm test` 必须覆盖 `ready`、`range`、`RangePager`、`client`、`login`、`compileMenus`、`useRowRange`、`Shell`（含退出与 `whenSettled`）、`router`、`session`。
 - `getApi()` 只能在 `app.use(pinia)` 之后调用。`main.ts` 先安装 Pinia，再安装路由。
