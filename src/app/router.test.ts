@@ -331,6 +331,48 @@ describe("router beforeEach", () => {
     expect(router.currentRoute.value.name).toBe("AssetDevice")
   })
 
+  // Value: protects=clearing the session while menus are in flight does not refresh the cookie and restore a token; fails_when=an epoch change always continues into anonymous refresh; why_new=identity-change tests replace the token with another user's token; seam=none; no_claim=the refresh cookie (getApi is mocked)
+  it("does not refresh after the session is cleared while menus are in flight", async () => {
+    let release: () => void = () => undefined
+    apiState.menuHold = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const pending = router.push("/asset/device")
+    await vi.waitFor(() => expect(apiState.menuCalls).toBe(1))
+    useSessionStore().reset()
+    apiState.refreshSucceeds = true
+    apiState.onRefreshSuccess = () => {
+      useSessionStore().setAccessToken("revived")
+    }
+    release()
+    await pending
+    expect(apiState.refreshCalls).toBe(0)
+    expect(useSessionStore().getAccessToken()).toBeNull()
+    expect(router.hasRoute("AssetDevice")).toBe(false)
+    expect(router.currentRoute.value.path).toBe("/login")
+  })
+
+  // Value: protects=a menu request that fails after logout does not refresh the cookie either; fails_when=the catch continues whenever the epoch changed; why_new=the cleared-session test only covers a menu response that still succeeds; seam=none; no_claim=the refresh cookie (getApi is mocked)
+  it("does not refresh after a menu request fails once the session is cleared", async () => {
+    let release: () => void = () => undefined
+    apiState.menuHold = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const pending = router.push("/asset/device")
+    await vi.waitFor(() => expect(apiState.menuCalls).toBe(1))
+    useSessionStore().reset()
+    apiState.menuReject = true
+    apiState.refreshSucceeds = true
+    apiState.onRefreshSuccess = () => {
+      useSessionStore().setAccessToken("revived")
+    }
+    release()
+    await pending
+    expect(apiState.refreshCalls).toBe(0)
+    expect(useSessionStore().getAccessToken()).toBeNull()
+    expect(router.currentRoute.value.path).toBe("/login")
+  })
+
   it("keeps the session when menu install sees a non-401 error and still clears on 401", async () => {
     await router.push("/login")
     expect(router.currentRoute.value.path).toBe("/login")

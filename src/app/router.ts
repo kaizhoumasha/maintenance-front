@@ -50,28 +50,44 @@ async function installMenusOnce() {
   const session = useSessionStore()
   while (!installed) {
     const epoch = session.getEpoch()
+    const identityChanged = () => session.getEpoch() !== epoch
     if (!session.getAccessToken()) {
       try {
         await getApi().refresh()
       } catch (error) {
-        if (session.getEpoch() !== epoch) continue
+        if (identityChanged()) {
+          if (!session.getAccessToken()) return
+          continue
+        }
         if (error instanceof HttpError && error.status !== 401) throw error
         session.reset()
         return
       }
     }
-    if (session.getEpoch() !== epoch) continue
+    if (identityChanged()) {
+      if (!session.getAccessToken()) return
+      continue
+    }
     try {
       const me = await getApi().request<{ permissions: string[] }>("/api/v1/users/me")
-      if (session.getEpoch() !== epoch) continue
+      if (identityChanged()) {
+        if (!session.getAccessToken()) return
+        continue
+      }
       const menus = await getApi().request<MenuNode[]>("/api/v1/users/me/menus")
-      if (session.getEpoch() !== epoch) continue
+      if (identityChanged()) {
+        if (!session.getAccessToken()) return
+        continue
+      }
       session.setPermissions(me.permissions)
       const compiled = withoutReservedNames(compileMenus(menus))
       for (const route of compiled) installedRouteRemovers.push(router.addRoute("Root", route))
       installed = true
     } catch (error) {
-      if (session.getEpoch() !== epoch) continue
+      if (identityChanged()) {
+        if (!session.getAccessToken()) return
+        continue
+      }
       if (error instanceof HttpError && error.status !== 401) throw error
       session.reset()
       return
