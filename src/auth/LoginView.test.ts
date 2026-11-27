@@ -76,4 +76,25 @@ describe("LoginView", () => {
     await flushPromises()
     expect(router.currentRoute.value.path).toBe("/")
   })
+
+  // Value: protects=login submits the username and password typed into the form; fails_when=onSubmit sends empty strings or swaps the two fields; why_new=LoginView tests mock submitLogin and never read its input argument; seam=none; no_claim=the auth endpoint (submitLogin is mocked)
+  it("submits the username and password typed into the form", async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: "/login", component: { template: "<div />" } },
+        { path: "/", component: { template: "<div />" } },
+      ],
+    })
+    await router.push("/login")
+    submitLogin.mockReset()
+    submitLogin.mockResolvedValue(undefined)
+    const wrapper = mount(LoginView, { global: { plugins: [createPinia(), router] } })
+    await wrapper.get("input[name=username]").setValue("admin")
+    await wrapper.get("input[name=password]").setValue("secret")
+    await wrapper.get("form").trigger("submit")
+    await flushPromises()
+
+    expect(submitLogin.mock.calls[0]?.[1]).toEqual({ username: "admin", password: "secret" })
+  })
 })

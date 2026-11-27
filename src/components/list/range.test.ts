@@ -43,6 +43,11 @@ describe("row range", () => {
     expect(retreatIfPageEmpty({ start: 1, end: 20 }, 0)).toEqual({ start: 1, end: 20 })
   })
 
+  // Value: protects=a window that still has rows is not moved backward; fails_when=retreatIfPageEmpty ignores itemCount and always calls previousWindow; why_new=the retreat assertions only pass an empty item count; seam=none; no_claim=the list request (pure function)
+  it("keeps the window when the current page still has rows", () => {
+    expect(retreatIfPageEmpty({ start: 21, end: 40 }, 3)).toEqual({ start: 21, end: 40 })
+  })
+
   it("refuses an offset past 100000", () => {
     expect(canRequest({ start: 100001, end: 100020 })).toBe(true)
     expect(canRequest({ start: 100002, end: 100021 })).toBe(false)

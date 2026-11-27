@@ -342,4 +342,78 @@ describe("Shell", () => {
     request.mockImplementation(async () => undefined)
     refresh.mockImplementation(async () => undefined)
   })
+
+  // Value: protects=logout with no access token skips the logout request and still clears the local session; fails_when=leave posts logout without a token or skips handleUnauthorized; why_new=Shell logout tests all call setAccessToken before clicking 退出; seam=none; no_claim=the logout endpoint (getApi is mocked)
+  it("clears the local session without requesting logout when there is no access token", async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: "/", name: "Root", component: { template: "<div />" } }],
+    })
+    await router.push("/")
+    await router.isReady()
+    window.matchMedia = (query: string) =>
+      ({
+        matches: false,
+        media: query,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }) as unknown as MediaQueryList
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(Shell, { global: { plugins: [pinia, router] } })
+    request.mockClear()
+    handleUnauthorized.mockClear()
+
+    const leave = wrapper.findAll("button").find((button) => button.text() === "退出")
+    await leave?.trigger("click")
+    await flushPromises()
+
+    expect(request).not.toHaveBeenCalled()
+    expect(handleUnauthorized).toHaveBeenCalledOnce()
+  })
+
+  // Value: protects=a menu link stays current when the address is a child of that link; fails_when=isCurrent requires an exact path and drops aria-current on a nested address; why_new=the shell test only opens the link path itself; seam=none; no_claim=pixel highlight (asserts aria-current)
+  it("marks a menu link current when the address is under that link", async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        {
+          path: "/",
+          name: "Root",
+          component: { template: "<router-view />" },
+          children: [
+            {
+              path: "/asset",
+              component: { template: "<router-view />" },
+              meta: { title: "设备资源" },
+              children: [
+                {
+                  path: "device",
+                  component: { template: "<router-view />" },
+                  meta: { title: "设备管理" },
+                  children: [{ path: "detail", component: { template: "<p>详情</p>" } }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    })
+    await router.push("/asset/device/detail")
+    await router.isReady()
+    window.matchMedia = (query: string) =>
+      ({
+        matches: false,
+        media: query,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }) as unknown as MediaQueryList
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(Shell, { global: { plugins: [pinia, router] } })
+    const link = wrapper.get("a")
+
+    expect(link.attributes("href")).toBe("/asset/device")
+    expect(link.attributes("aria-current")).toBe("page")
+  })
 })
