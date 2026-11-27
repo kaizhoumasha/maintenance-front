@@ -59,7 +59,7 @@ async function installMenusOnce() {
           if (!session.getAccessToken()) return
           continue
         }
-        if (error instanceof HttpError && error.status !== 401) throw error
+        if (!(error instanceof HttpError) || error.status !== 401) throw error
         session.reset()
         return
       }
@@ -88,7 +88,7 @@ async function installMenusOnce() {
         if (!session.getAccessToken()) return
         continue
       }
-      if (error instanceof HttpError && error.status !== 401) throw error
+      if (!(error instanceof HttpError) || error.status !== 401) throw error
       session.reset()
       return
     }

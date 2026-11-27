@@ -22,8 +22,9 @@ export function useRowRange() {
   }
 
   watch(
-    () => filterKey(route.query.filter),
-    () => {
+    () => [route.path, filterKey(route.query.filter)] as const,
+    ([path, filter], previous) => {
+      if (!previous || path !== previous[0] || filter === previous[1]) return
       const start = String(DEFAULT_RANGE.start)
       const end = String(DEFAULT_RANGE.end)
       if (route.query.start === start && route.query.end === end) return

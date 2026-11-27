@@ -201,14 +201,30 @@ describe("router beforeEach", () => {
     expect(router.hasRoute("SystemUser")).toBe(true)
   })
 
-  // Value: protects=an anonymous visit to a protected path ends on /login and does not install menus when refresh fails; fails_when=the guard allows the page or installMenus still requests /users/me after refresh throws; why_new=router tests always set an access token before navigation; seam=none; no_claim=the refresh HTTP call (getApi is mocked to reject)
-  it("sends an anonymous visitor to login when refresh fails and does not install menus", async () => {
+  // Value: protects=an anonymous 401 refresh ends on /login and does not install menus; fails_when=the guard allows the page or installMenus still requests /users/me after refresh returns 401; why_new=the offline refresh test must not be treated as a logout; seam=none; no_claim=the refresh HTTP call (getApi is mocked to reject)
+  it("sends an anonymous visitor to login when refresh is unauthorized", async () => {
     useSessionStore().setAccessToken(null)
     await router.push("/login")
+    apiState.refreshStatus = 401
     apiState.meCalls = 0
     apiState.menuCalls = 0
     await router.push("/asset/device")
     expect(router.currentRoute.value.path).toBe("/login")
+    expect(apiState.meCalls).toBe(0)
+    expect(apiState.menuCalls).toBe(0)
+    expect(router.hasRoute("AssetDevice")).toBe(false)
+  })
+
+  // Value: protects=an anonymous refresh that cannot reach the server leaves the address in place and shows a notice; fails_when=a generic refresh error resets the session and resolves a redirect to /login; why_new=the unauthorized refresh test covers 401 only; seam=none; no_claim=the refresh HTTP call (getApi is mocked to reject)
+  it("shows a notice when an anonymous refresh cannot reach the server", async () => {
+    useSessionStore().setAccessToken(null)
+    await router.push("/login")
+    apiState.meCalls = 0
+    apiState.menuCalls = 0
+    await expect(router.push("/asset/device")).rejects.toThrow("offline")
+    expect(navigationNotice.value).toEqual({ message: "暂时不可用", retryAfter: null })
+    expect(router.currentRoute.value.path).toBe("/login")
+    expect(useSessionStore().getAccessToken()).toBeNull()
     expect(apiState.meCalls).toBe(0)
     expect(apiState.menuCalls).toBe(0)
     expect(router.hasRoute("AssetDevice")).toBe(false)
@@ -228,22 +244,23 @@ describe("router beforeEach", () => {
     expect(apiState.menuCalls).toBe(0)
   })
 
-  // Value: protects=a thrown profile or menu request ends on /login with the session cleared and no dynamic routes; fails_when=beforeEach rejects and the app stays on the unstarted location, or a failed menu request keeps the new permissions; why_new=router tests only cover refresh failure and successful menu installation; seam=none; no_claim=the live status code (request is mocked to reject)
-  it("sends the visitor to login when the profile or menu request throws", async () => {
+  // Value: protects=a profile or menu failure that is not 401 keeps the token and shows a notice; fails_when=the catch resets the session and resolves a redirect to /login; why_new=the old assertion treated every thrown error as logout; seam=none; no_claim=the live status code (request is mocked to reject)
+  it("keeps the session when the profile or menu request cannot be read", async () => {
+    await router.push("/login")
     apiState.meReject = true
-    await router.push("/asset/device")
+    await expect(router.push("/asset/device")).rejects.toThrow("profile down")
+    expect(navigationNotice.value).toEqual({ message: "暂时不可用", retryAfter: null })
     expect(router.currentRoute.value.path).toBe("/login")
-    expect(useSessionStore().getAccessToken()).toBeNull()
+    expect(useSessionStore().getAccessToken()).toBe("token")
     expect(useSessionStore().permissions).toEqual([])
     expect(router.hasRoute("AssetDevice")).toBe(false)
 
     apiState.meReject = false
     apiState.menuReject = true
-    useSessionStore().setAccessToken("token")
-    await router.push("/asset/device")
-    expect(router.currentRoute.value.path).toBe("/login")
-    expect(useSessionStore().getAccessToken()).toBeNull()
-    expect(useSessionStore().permissions).toEqual([])
+    clearNavigationNotice()
+    await expect(router.push("/asset/device")).rejects.toThrow("menus down")
+    expect(navigationNotice.value).toEqual({ message: "暂时不可用", retryAfter: null })
+    expect(useSessionStore().getAccessToken()).toBe("token")
     expect(router.hasRoute("AssetDevice")).toBe(false)
   })
 
@@ -387,6 +404,22 @@ describe("router beforeEach", () => {
     await router.push("/asset/device")
     expect(useSessionStore().getAccessToken()).toBeNull()
     expect(router.currentRoute.value.path).toBe("/login")
+  })
+
+  // Value: protects=a 403 or 500 while installing menus keeps the session and shows the server message; fails_when=the notice only records 429 and 5xx gateway statuses; why_new=the non-401 test covers 429 and 401 only; seam=none; no_claim=the profile payload (getApi is mocked)
+  it("shows the server message when profile install is forbidden or fails", async () => {
+    for (const status of [403, 500]) {
+      useSessionStore().setAccessToken(null)
+      useSessionStore().setAccessToken("token")
+      await router.push("/login")
+      clearNavigationNotice()
+      apiState.meStatus = status
+      await expect(router.push("/asset/device")).rejects.toMatchObject({ status, message: "请求过多" })
+      expect(useSessionStore().getAccessToken()).toBe("token")
+      expect(navigationNotice.value?.message).toBe("请求过多")
+      expect(router.currentRoute.value.path).toBe("/login")
+      expect(router.hasRoute("AssetDevice")).toBe(false)
+    }
   })
 
   // Value: protects=opening the shell lands on the first visible menu instead of an empty content area; fails_when=the guard leaves the address on / after menus install; why_new=router tests open /asset/device directly or expect / to stay blank; seam=none; no_claim=the login form (navigation is the router guard)

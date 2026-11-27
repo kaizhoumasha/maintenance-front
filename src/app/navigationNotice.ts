@@ -6,13 +6,23 @@ export interface NavigationNotice {
   retryAfter: string | null
 }
 
-const unavailable = new Set([429, 502, 503, 504])
+const noted = new Set([403, 429, 500, 502, 503, 504])
 
 export const navigationNotice = ref<NavigationNotice | null>(null)
 
+function noticeMessage(error: HttpError): string {
+  if (error.message) return error.message
+  if (error.status === 403) return "没有权限"
+  return "暂时不可用"
+}
+
 export function noteNavigationError(error: unknown) {
-  if (!(error instanceof HttpError) || !unavailable.has(error.status)) return
-  navigationNotice.value = { message: error.message, retryAfter: error.retryAfter }
+  if (error instanceof HttpError) {
+    if (!noted.has(error.status)) return
+    navigationNotice.value = { message: noticeMessage(error), retryAfter: error.retryAfter }
+    return
+  }
+  navigationNotice.value = { message: "暂时不可用", retryAfter: null }
 }
 
 export function clearNavigationNotice() {

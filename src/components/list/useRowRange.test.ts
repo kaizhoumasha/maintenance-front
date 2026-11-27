@@ -64,4 +64,21 @@ describe("useRowRange", () => {
     expect(router.currentRoute.value.query).toEqual({ start: "1", end: "20", filter: "closed" })
     expect(wrapper.text()).toBe("1-20")
   })
+
+  // Value: protects=opening another list keeps that page's window when its filter differs; fails_when=the leaving page resets the current route to rows 1-20; why_new=the filter test changes the query on the same path; seam=none; no_claim=a list request (asserts the route query)
+  it("keeps the next page window when its filter differs", async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: "/asset/device", component: Probe },
+        { path: "/asset/workline", component: Probe },
+      ],
+    })
+    await router.push("/asset/device?start=21&end=40&filter=open")
+    mount(Probe, { global: { plugins: [router] } })
+    await router.push("/asset/workline?start=5&end=10&filter=closed")
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe("/asset/workline")
+    expect(router.currentRoute.value.query).toEqual({ start: "5", end: "10", filter: "closed" })
+  })
 })
