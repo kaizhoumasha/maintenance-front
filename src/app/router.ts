@@ -7,6 +7,7 @@ import { compileMenus } from "@/menus/compile"
 import type { MenuNode } from "@/menus/types"
 
 let installed = false
+let installing: Promise<void> | null = null
 const installedRouteRemovers: Array<() => void> = []
 
 export const router = createRouter({
@@ -36,15 +37,24 @@ export function discardInstalledMenus() {
 
 onAccessTokenIdentityChange(discardInstalledMenus)
 
-export async function installMenus() {
+export function installMenus(): Promise<void> {
+  if (installing) return installing
+  installing = installMenusOnce().finally(() => {
+    installing = null
+  })
+  return installing
+}
+
+async function installMenusOnce() {
   const session = useSessionStore()
   while (!installed) {
     const epoch = session.getEpoch()
     if (!session.getAccessToken()) {
       try {
         await getApi().refresh()
-      } catch {
+      } catch (error) {
         if (session.getEpoch() !== epoch) continue
+        if (error instanceof HttpError && error.status !== 401) throw error
         session.reset()
         return
       }

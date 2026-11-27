@@ -20,6 +20,7 @@ async function onSubmit() {
   try {
     await submitLogin(getApi(), { username: username.value, password: password.value }, session)
     await router.push("/")
+    if (router.currentRoute.value.path === "/login") message.value = "暂时无法进入系统"
   } catch (error) {
     message.value = error instanceof HttpError ? error.message : "登录失败"
   } finally {

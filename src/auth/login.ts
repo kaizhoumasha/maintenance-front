@@ -1,5 +1,5 @@
+import { HttpError, usableAccessToken, type TokenSource } from "@/api/client"
 import type { TokenPair } from "@/api/types"
-import type { TokenSource } from "@/api/client"
 
 interface LoginClient {
   request<T>(path: string, init?: RequestInit & { skipRefresh?: boolean }): Promise<T>
@@ -17,5 +17,9 @@ export async function submitLogin(
     skipRefresh: true,
     body: JSON.stringify(input),
   })
-  session.setAccessToken(pair.access_token)
+  const accessToken = usableAccessToken(pair)
+  if (!accessToken) {
+    throw new HttpError(401, { trace_id: "", code: "UNAUTHORIZED", message: "未登录", detail: null }, null)
+  }
+  session.setAccessToken(accessToken)
 }

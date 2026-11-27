@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import { HttpError } from "@/api/client"
 import { submitLogin } from "@/auth/login"
 
 describe("submitLogin", () => {
@@ -50,5 +51,25 @@ describe("submitLogin", () => {
     await pending
     expect(order).toEqual(["settled", "login"])
     expect(token).toBe("abc")
+  })
+
+  // Value: protects=a login body without a usable access_token is rejected and the previous token stays; fails_when=submitLogin writes pair.access_token even when it is missing or empty; why_new=login tests only return a string access_token; seam=none; no_claim=the auth endpoint (request is mocked)
+  it("does not store a login response that has no usable access token", async () => {
+    for (const body of [{ token_type: "bearer" }, { access_token: "" }, { access_token: null }, { access_token: 1 }]) {
+      const request = vi.fn(async () => body)
+      let token: string | null = "old"
+      const sets: Array<string | null> = []
+      await expect(
+        submitLogin({ request: request as Parameters<typeof submitLogin>[0]["request"] }, { username: "admin", password: "secret" }, {
+          getAccessToken: () => token,
+          setAccessToken: (next) => {
+            sets.push(next)
+            token = next
+          },
+        }),
+      ).rejects.toBeInstanceOf(HttpError)
+      expect(sets).toEqual([])
+      expect(token).toBe("old")
+    }
   })
 })

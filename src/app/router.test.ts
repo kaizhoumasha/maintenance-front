@@ -29,6 +29,7 @@ const apiState = vi.hoisted(() => {
     meReject: false,
     menuReject: false,
     meStatus: null as number | null,
+    refreshStatus: null as number | null,
     meHold: null as Promise<void> | null,
     refreshHold: null as Promise<void> | null,
     menuHold: null as Promise<void> | null,
@@ -43,6 +44,19 @@ vi.mock("@/app/api", () => ({
       if (apiState.refreshSucceeds) {
         apiState.onRefreshSuccess?.()
         return "refreshed"
+      }
+      if (apiState.refreshStatus) {
+        const { HttpError } = await import("@/api/client")
+        throw new HttpError(
+          apiState.refreshStatus,
+          {
+            trace_id: "t",
+            code: apiState.refreshStatus === 401 ? "UNAUTHORIZED" : "UNAVAILABLE",
+            message: apiState.refreshStatus === 401 ? "未登录" : "暂时不可用",
+            detail: null,
+          },
+          apiState.refreshStatus === 429 ? "12" : null,
+        )
       }
       throw new Error("offline")
     },
@@ -86,6 +100,7 @@ describe("router beforeEach", () => {
     apiState.meReject = false
     apiState.menuReject = false
     apiState.meStatus = null
+    apiState.refreshStatus = null
     apiState.meHold = null
     apiState.refreshHold = null
     apiState.menuHold = null
@@ -351,5 +366,41 @@ describe("router beforeEach", () => {
     await router.push("/")
     expect(router.currentRoute.value.path).toBe("/")
     expect(router.currentRoute.value.name).toBe("Root")
+  })
+
+  // Value: protects=an anonymous 429 or 503 refresh stays on the current page and does not request menus; fails_when=the refresh catch resets and the guard redirects to login; why_new=anonymous refresh tests only throw a generic Error, which still enters login; seam=none; no_claim=the refresh cookie (getApi is mocked)
+  it("stays put when an anonymous refresh is temporarily unavailable", async () => {
+    for (const status of [429, 503]) {
+      useSessionStore().setAccessToken(null)
+      await router.push("/login")
+      apiState.refreshStatus = status
+      apiState.meCalls = 0
+      apiState.menuCalls = 0
+      await expect(router.push("/asset/device")).rejects.toMatchObject({ status, message: "暂时不可用" })
+      expect(router.currentRoute.value.path).toBe("/login")
+      expect(useSessionStore().getAccessToken()).toBeNull()
+      expect(apiState.meCalls).toBe(0)
+      expect(apiState.menuCalls).toBe(0)
+    }
+  })
+
+  // Value: protects=a second navigation during menu install waits for the same install; fails_when=each guard calls addRoute and the profile is requested twice; why_new=router tests only navigate after the previous guard has settled; seam=none; no_claim=the menu payload (getApi is mocked and held)
+  it("installs menus once when another navigation starts during the install", async () => {
+    let release: () => void = () => undefined
+    apiState.menuHold = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const first = router.push("/asset/device")
+    await vi.waitFor(() => expect(apiState.menuCalls).toBe(1))
+    const second = router.push("/asset/workline")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(apiState.meCalls).toBe(1)
+    expect(apiState.menuCalls).toBe(1)
+    release()
+    await Promise.allSettled([first, second])
+    expect(apiState.meCalls).toBe(1)
+    expect(apiState.menuCalls).toBe(1)
+    expect(router.getRoutes().filter((route) => route.name === "AssetDevice")).toHaveLength(1)
+    expect(router.currentRoute.value.name).toBe("AssetWorkline")
   })
 })

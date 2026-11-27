@@ -36,7 +36,7 @@ function fallbackError(response: Response): HttpError {
   )
 }
 
-function usableAccessToken(body: unknown): string | null {
+export function usableAccessToken(body: unknown): string | null {
   if (typeof body !== "object" || body === null || !("access_token" in body)) return null
   const token = body.access_token
   return typeof token === "string" && token.length > 0 ? token : null

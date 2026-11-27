@@ -97,4 +97,25 @@ describe("LoginView", () => {
 
     expect(submitLogin.mock.calls[0]?.[1]).toEqual({ username: "admin", password: "secret" })
   })
+
+  // Value: protects=a login that is accepted and then sent back to /login shows a message; fails_when=push resolves after a redirect and the form stays blank; why_new=LoginView tests either stay on /login after a thrown login error or land on /; seam=none; no_claim=the menu request (submitLogin and the router are stubs)
+  it("shows a message when login is accepted but navigation returns to login", async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: "/login", name: "Login", component: { template: "<div />" } },
+        { path: "/", redirect: "/login" },
+      ],
+    })
+    await router.push("/login")
+    submitLogin.mockReset()
+    submitLogin.mockResolvedValue(undefined)
+    const wrapper = mount(LoginView, { global: { plugins: [createPinia(), router] } })
+    await wrapper.get("input[name=username]").setValue("admin")
+    await wrapper.get("input[name=password]").setValue("secret")
+    await wrapper.get("form").trigger("submit")
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe("/login")
+    expect(wrapper.text()).toContain("暂时无法进入系统")
+  })
 })
