@@ -372,6 +372,48 @@ describe("Shell", () => {
     expect(handleUnauthorized).toHaveBeenCalledOnce()
   })
 
+  // Value: protects=a second click while logout is in flight does not send another logout; fails_when=leave starts a second request before the first settles; why_new=logout tests await one click before the next; seam=none; no_claim=the logout endpoint (getApi is mocked and held)
+  it("sends one logout when the button is clicked again while leaving", async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: "/", name: "Root", component: { template: "<div />" } }],
+    })
+    await router.push("/")
+    await router.isReady()
+    window.matchMedia = (query: string) =>
+      ({
+        matches: false,
+        media: query,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }) as unknown as MediaQueryList
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    useSessionStore().setAccessToken("token")
+    const wrapper = mount(Shell, { global: { plugins: [pinia, router] } })
+    let release: () => void = () => undefined
+    request.mockReset()
+    handleUnauthorized.mockReset()
+    request.mockImplementation(
+      () =>
+        new Promise<undefined>((resolve) => {
+          release = () => resolve(undefined)
+        }),
+    )
+
+    const leave = wrapper.findAll("button").find((button) => button.text() === "退出")
+    const first = leave?.trigger("click")
+    const second = leave?.trigger("click")
+    await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(1))
+    release()
+    await first
+    await second
+    await flushPromises()
+
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(handleUnauthorized).toHaveBeenCalledOnce()
+  })
+
   // Value: protects=a menu link stays current when the address is a child of that link; fails_when=isCurrent requires an exact path and drops aria-current on a nested address; why_new=the shell test only opens the link path itself; seam=none; no_claim=pixel highlight (asserts aria-current)
   it("marks a menu link current when the address is under that link", async () => {
     const router = createRouter({

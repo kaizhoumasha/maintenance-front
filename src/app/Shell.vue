@@ -10,6 +10,7 @@ import { useSessionStore } from "@/auth/session"
 const session = useSessionStore()
 const router = useRouter()
 const notice = ref("")
+const leaving = ref(false)
 
 const sections = computed(() => {
   void router.currentRoute.value.fullPath
@@ -40,29 +41,35 @@ onMounted(collapseIfNarrow)
 watch(() => router.currentRoute.value.fullPath, collapseIfNarrow)
 
 async function leave() {
+  if (leaving.value) return
+  leaving.value = true
   notice.value = ""
-  if (session.getAccessToken()) {
-    const api = getApi()
-    try {
-      await api.request("/api/v1/auth/logout", { method: "POST", skipRefresh: true })
-    } catch (error) {
-      if (!(error instanceof HttpError) || error.status !== 401) {
-        notice.value = error instanceof HttpError ? error.message : "暂时不可用"
-        return
-      }
+  try {
+    if (session.getAccessToken()) {
+      const api = getApi()
       try {
-        await api.refresh()
         await api.request("/api/v1/auth/logout", { method: "POST", skipRefresh: true })
-      } catch (retryError) {
-        if (!(retryError instanceof HttpError) || retryError.status !== 401) {
-          notice.value = retryError instanceof HttpError ? retryError.message : "暂时不可用"
+      } catch (error) {
+        if (!(error instanceof HttpError) || error.status !== 401) {
+          notice.value = error instanceof HttpError ? error.message : "暂时不可用"
           return
         }
-        // 访问令牌和刷新凭证都已失效时，仍然清掉本机会话。
+        try {
+          await api.refresh()
+          await api.request("/api/v1/auth/logout", { method: "POST", skipRefresh: true })
+        } catch (retryError) {
+          if (!(retryError instanceof HttpError) || retryError.status !== 401) {
+            notice.value = retryError instanceof HttpError ? retryError.message : "暂时不可用"
+            return
+          }
+          // 访问令牌和刷新凭证都已失效时，仍然清掉本机会话。
+        }
       }
     }
+    await handleUnauthorized()
+  } finally {
+    leaving.value = false
   }
-  await handleUnauthorized()
 }
 </script>
 
@@ -112,7 +119,7 @@ async function leave() {
             <button type="button" class="px-2 py-1 text-sm text-oxide transition-colors duration-150 hover:text-ink" @click="toggleSidebar">
               {{ session.sidebarCollapsed ? "展开菜单" : "收起菜单" }}
             </button>
-            <button type="button" class="px-2 py-1 text-sm text-ink" @click="leave">退出</button>
+            <button type="button" class="px-2 py-1 text-sm text-ink disabled:text-oxide" :disabled="leaving" @click="leave">退出</button>
           </div>
         </header>
         <p v-if="notice" class="border-b border-rule px-4 py-2 text-sm text-alert md:px-6" role="alert">{{ notice }}</p>
