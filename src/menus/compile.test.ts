@@ -163,4 +163,27 @@ describe("compileMenus", () => {
     expect(routes[0]?.children?.[1]?.path).toBe("/invalid/Note")
     expect(routes[0]?.children?.[1]?.meta).toMatchObject({ missing: true })
   })
+
+  // Value: protects=a :// menu path is not registered in-app; fails_when=the :// check is removed, since this path does not start with // and its segments have no colon; why_new=compile tests cover //evil, javascript:, and backslashes, which do not match this shape; seam=none; no_claim=the browser follows the path (route record only)
+  it("does not register a scheme path whose segments are empty", () => {
+    const routes = compileMenus([
+      { name: "Scheme", path: "://evil.example", component: "asset/device/index", meta: { title: "协议" } },
+      {
+        name: "Assets",
+        path: "/asset",
+        component: "Layout",
+        redirect: "://evil.example",
+        meta: { title: "设备资源" },
+        children: [
+          { name: "AssetDevice", path: "device", component: "asset/device/index", meta: { title: "设备管理" } },
+        ],
+      },
+    ])
+    expect(routes[0]?.path).toBe("/invalid/Scheme")
+    expect(routes[0]?.path.includes("://")).toBe(false)
+    expect(routes[0]?.path.includes("evil.example")).toBe(false)
+    expect(routes[0]?.meta).toMatchObject({ missing: true, title: "协议" })
+    expect(routes[1]?.redirect).toBeUndefined()
+    expect(routes[1]?.children?.[0]?.path).toBe("device")
+  })
 })

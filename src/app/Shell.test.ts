@@ -9,14 +9,21 @@ import { useSessionStore } from "@/auth/session"
 const handleUnauthorized = vi.hoisted(() => vi.fn())
 const request = vi.hoisted(() => vi.fn(async () => undefined))
 const refresh = vi.hoisted(() => vi.fn(async () => undefined))
+const whenSettled = vi.hoisted(() => vi.fn(async () => undefined))
 
 vi.mock("@/app/unauthorized", () => ({
   handleUnauthorized,
 }))
 
 vi.mock("@/app/api", () => ({
-  getApi: () => ({ request, refresh }),
+  getApi: () => ({ request, refresh, whenSettled }),
 }))
+
+function unsignedAccessToken(payload: object): string {
+  const encode = (value: object) =>
+    btoa(JSON.stringify(value)).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "")
+  return `${encode({ alg: "none", typ: "JWT" })}.${encode(payload)}.signature`
+}
 
 describe("Shell", () => {
   it("shows visible menu items, the parent in the top bar, and leaves through the session", async () => {
@@ -106,6 +113,7 @@ describe("Shell", () => {
 
     const leave = wrapper.findAll("button").find((button) => button.text() === "退出")
     await leave?.trigger("click")
+    await flushPromises()
 
     expect(refresh).toHaveBeenCalledOnce()
     expect(request).toHaveBeenNthCalledWith(1, "/api/v1/auth/logout", { method: "POST", skipRefresh: true })
@@ -412,6 +420,78 @@ describe("Shell", () => {
 
     expect(request).toHaveBeenCalledTimes(1)
     expect(handleUnauthorized).toHaveBeenCalledOnce()
+  })
+
+  // Value: protects=logout waits for an in-flight refresh and does not revoke a different account that refresh adopted; fails_when=leave posts logout before whenSettled, or a 401 retry logs out the other subject; why_new=logout tests resolve whenSettled immediately and never change the token subject; seam=none; no_claim=the refresh cookie (getApi is mocked)
+  it("does not revoke a different account adopted while logging out", async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: "/", name: "Root", component: { template: "<div />" } }],
+    })
+    await router.push("/")
+    await router.isReady()
+    window.matchMedia = (query: string) =>
+      ({
+        matches: false,
+        media: query,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }) as unknown as MediaQueryList
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const session = useSessionStore()
+    const mine = unsignedAccessToken({ sub: "user-a" })
+    const other = unsignedAccessToken({ sub: "user-b" })
+    session.setAccessToken(mine)
+    const wrapper = mount(Shell, { global: { plugins: [pinia, router] } })
+    let release: () => void = () => undefined
+    request.mockReset()
+    refresh.mockReset()
+    handleUnauthorized.mockReset()
+    whenSettled.mockReset()
+    whenSettled.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          release = () => resolve()
+        }),
+    )
+
+    const leave = wrapper.findAll("button").find((button) => button.text() === "退出")
+    const pending = leave?.trigger("click")
+    await flushPromises()
+    expect(request).not.toHaveBeenCalled()
+    session.setAccessToken(other)
+    release()
+    await pending
+    await flushPromises()
+
+    expect(request).not.toHaveBeenCalled()
+    expect(refresh).not.toHaveBeenCalled()
+    expect(handleUnauthorized).toHaveBeenCalledOnce()
+
+    session.setAccessToken(mine)
+    const denied = new HttpError(401, { trace_id: "t", code: "UNAUTHORIZED", message: "未登录", detail: null }, null)
+    request.mockReset()
+    refresh.mockReset()
+    handleUnauthorized.mockReset()
+    whenSettled.mockReset()
+    whenSettled.mockImplementation(async () => undefined)
+    request.mockRejectedValueOnce(denied)
+    refresh.mockImplementation(async () => {
+      session.setAccessToken(other)
+    })
+    await leave?.trigger("click")
+    await flushPromises()
+
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(refresh).toHaveBeenCalledOnce()
+    expect(handleUnauthorized).toHaveBeenCalledOnce()
+    request.mockReset()
+    refresh.mockReset()
+    whenSettled.mockReset()
+    request.mockImplementation(async () => undefined)
+    refresh.mockImplementation(async () => undefined)
+    whenSettled.mockImplementation(async () => undefined)
   })
 
   // Value: protects=a menu link stays current when the address is a child of that link; fails_when=isCurrent requires an exact path and drops aria-current on a nested address; why_new=the shell test only opens the link path itself; seam=none; no_claim=pixel highlight (asserts aria-current)

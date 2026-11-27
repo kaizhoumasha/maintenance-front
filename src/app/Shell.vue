@@ -6,6 +6,7 @@ import { getApi } from "@/app/api"
 import { sidebarSections } from "@/app/sidebar"
 import { handleUnauthorized } from "@/app/unauthorized"
 import { useSessionStore } from "@/auth/session"
+import { accessTokenSubject } from "@/auth/tokenSubject"
 
 const session = useSessionStore()
 const router = useRouter()
@@ -40,13 +41,27 @@ function collapseIfNarrow() {
 onMounted(collapseIfNarrow)
 watch(() => router.currentRoute.value.fullPath, collapseIfNarrow)
 
+function stillSameAccount(before: string, after: string | null): boolean {
+  if (!after) return false
+  const beforeSubject = accessTokenSubject(before)
+  const afterSubject = accessTokenSubject(after)
+  if (beforeSubject && afterSubject) return beforeSubject === afterSubject
+  return before === after
+}
+
 async function leave() {
   if (leaving.value) return
   leaving.value = true
   notice.value = ""
   try {
-    if (session.getAccessToken()) {
+    const intended = session.getAccessToken()
+    if (intended) {
       const api = getApi()
+      await api.whenSettled?.()
+      if (!stillSameAccount(intended, session.getAccessToken())) {
+        await handleUnauthorized()
+        return
+      }
       try {
         await api.request("/api/v1/auth/logout", { method: "POST", skipRefresh: true })
       } catch (error) {
@@ -56,7 +71,9 @@ async function leave() {
         }
         try {
           await api.refresh()
-          await api.request("/api/v1/auth/logout", { method: "POST", skipRefresh: true })
+          if (stillSameAccount(intended, session.getAccessToken())) {
+            await api.request("/api/v1/auth/logout", { method: "POST", skipRefresh: true })
+          }
         } catch (retryError) {
           if (!(retryError instanceof HttpError) || retryError.status !== 401) {
             notice.value = retryError instanceof HttpError ? retryError.message : "暂时不可用"
