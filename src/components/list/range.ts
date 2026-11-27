@@ -30,7 +30,8 @@ export function applyDraft(current: RowRange, draft: { start: string; end: strin
   const start = parseDraft(draft.start)
   const end = parseDraft(draft.end)
   if (start === null || end === null || start > end) return current
-  if (!canRequest({ start, end }) || total < 1) return current
+  if (!canRequest({ start, end })) return current
+  if (total < 1 && start > current.start) return current
   let next = { start, end }
   if (total >= 1 && next.end > total) next = { ...next, end: total }
   if (total >= 1 && next.start > total) next = { ...next, start: total }

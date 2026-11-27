@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest"
-import { HttpError } from "@/api/client"
 import { submitLogin } from "@/auth/login"
 
 describe("submitLogin", () => {
@@ -67,7 +66,7 @@ describe("submitLogin", () => {
             token = next
           },
         }),
-      ).rejects.toBeInstanceOf(HttpError)
+      ).rejects.toMatchObject({ message: "登录失败" })
       expect(sets).toEqual([])
       expect(token).toBe("old")
     }

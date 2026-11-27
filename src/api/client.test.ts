@@ -516,18 +516,60 @@ describe("api client", () => {
     }
   })
 
-  // Value: protects=a 200 refresh without a usable access_token leaves the current token untouched and fails once; fails_when=the body is cast to TokenPair and a missing token is stored, so a caller with no token refreshes forever; why_new=refresh tests only return a string access_token; seam=none; no_claim=the refresh cookie (fetch is mocked)
-  it("rejects a refresh body that has no usable access token and does not store it", async () => {
+  // Value: protects=a 200 refresh without a usable access_token clears an unchanged session once and does not store the body; fails_when=the old token stays and the next request refreshes again; why_new=the previous assertion kept the old token; seam=none; no_claim=the refresh cookie (fetch is mocked)
+  it("clears an unchanged session when a refresh body has no usable access token", async () => {
     for (const body of [{ token_type: "bearer" }, { access_token: "", token_type: "bearer" }, { access_token: null }, { access_token: 1 }]) {
       const token = source("old")
+      let unauthorized = 0
       const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
         if (String(input).endsWith("/auth/refresh")) return json(200, body)
         return json(401, { trace_id: "t", code: "UNAUTHORIZED", message: "未登录", detail: null })
       })
-      const client = createApiClient({ fetchFn, token })
+      const client = createApiClient({
+        fetchFn,
+        token,
+        onUnauthorized: () => {
+          unauthorized += 1
+        },
+      })
       await expect(client.request("/api/v1/users")).rejects.toBeInstanceOf(HttpError)
-      expect(token.getAccessToken()).toBe("old")
+      expect(token.getAccessToken()).toBeNull()
+      expect(unauthorized).toBe(1)
       expect(fetchFn.mock.calls.filter((call) => String(call[0]).endsWith("/auth/refresh"))).toHaveLength(1)
     }
+  })
+
+  // Value: protects=a useless refresh body does not clear a session that replaced the token while the refresh was in flight; fails_when=invalidate runs after the token changed; why_new=the unchanged-session test never replaces the token; seam=none; no_claim=the refresh cookie (fetch is mocked)
+  it("does not clear a replacement session when the refresh body has no usable access token", async () => {
+    setActivePinia(createPinia())
+    const session = useSessionStore()
+    session.setAccessToken("old")
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/auth/refresh")) {
+        await gate
+        return json(200, { token_type: "bearer" })
+      }
+      return json(401, { trace_id: "t", code: "UNAUTHORIZED", message: "未登录", detail: null })
+    })
+    const client = createApiClient({ fetchFn, token: sessionTokenSource(), onUnauthorized: handleUnauthorized })
+    const pending = client.request("/api/v1/users")
+    await vi.waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(2))
+    session.setAccessToken("newer")
+    release()
+    await expect(pending).rejects.toBeInstanceOf(HttpError)
+    expect(session.getAccessToken()).toBe("newer")
+  })
+
+  // Value: protects=a refresh token that is only whitespace is rejected and not stored; fails_when=length > 0 treats spaces as a bearer token; why_new=the unusable-body cases are empty, null, or a number; seam=none; no_claim=the refresh cookie (fetch is mocked)
+  it("rejects a whitespace access token from refresh", async () => {
+    const token = source(null)
+    const fetchFn = vi.fn(async () => json(200, { access_token: "   ", token_type: "bearer" }))
+    const client = createApiClient({ fetchFn, token })
+    await expect(client.refresh()).rejects.toBeInstanceOf(HttpError)
+    expect(token.getAccessToken()).toBeNull()
   })
 })

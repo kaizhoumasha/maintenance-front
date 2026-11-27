@@ -76,5 +76,6 @@ describe("row range", () => {
     expect(nextWindow({ start: 21, end: 40 }, 0)).toEqual({ start: 21, end: 40 })
     expect(canRequest(nextWindow({ start: 1, end: 20 }, 0))).toBe(true)
     expect(applyDraft(DEFAULT_RANGE, { start: "21", end: "40" }, 0)).toEqual(DEFAULT_RANGE)
+    expect(applyDraft({ start: 21, end: 40 }, { start: "1", end: "20" }, 0)).toEqual({ start: 1, end: 20 })
   })
 })

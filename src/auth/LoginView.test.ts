@@ -118,4 +118,29 @@ describe("LoginView", () => {
     expect(router.currentRoute.value.path).toBe("/login")
     expect(wrapper.text()).toContain("暂时无法进入系统")
   })
+
+  // Value: protects=a thrown navigation error stays as error.message and is not replaced by the return-to-login copy; fails_when=the path check runs after a rejected push; why_new=the return-to-login test only covers a resolved redirect; seam=none; no_claim=the menu request (the router guard is stubbed)
+  it("shows the navigation error when entering the shell fails", async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: "/login", component: { template: "<div />" } },
+        {
+          path: "/",
+          component: { template: "<div />" },
+          beforeEnter: () => {
+            throw new HttpError(503, { trace_id: "t", code: "UNAVAILABLE", message: "暂时不可用", detail: null }, "12")
+          },
+        },
+      ],
+    })
+    await router.push("/login")
+    submitLogin.mockReset()
+    submitLogin.mockResolvedValue(undefined)
+    const wrapper = mount(LoginView, { global: { plugins: [createPinia(), router] } })
+    await wrapper.get("form").trigger("submit")
+    await flushPromises()
+    expect(wrapper.text()).toContain("暂时不可用")
+    expect(wrapper.text()).not.toContain("暂时无法进入系统")
+  })
 })

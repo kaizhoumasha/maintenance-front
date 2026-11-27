@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory, type RouteLocationNormalized, type RouteRecordRaw } from "vue-router"
 import { HttpError } from "@/api/client"
 import { getApi } from "@/app/api"
+import { clearNavigationNotice, noteNavigationError } from "@/app/navigationNotice"
 import { firstVisibleMenuPath } from "@/app/sidebar"
 import { onAccessTokenIdentityChange, useSessionStore } from "@/auth/session"
 import { compileMenus } from "@/menus/compile"
@@ -84,6 +85,14 @@ function shellLanding(to: RouteLocationNormalized): string | null {
   const landing = firstVisibleMenuPath(router.getRoutes())
   return landing && landing !== to.path ? landing : null
 }
+
+router.onError((error) => {
+  noteNavigationError(error)
+})
+
+router.afterEach((_to, _from, failure) => {
+  if (!failure) clearNavigationNotice()
+})
 
 router.beforeEach(async (to) => {
   if (to.meta.public) return true

@@ -19,7 +19,7 @@ export async function submitLogin(
   })
   const accessToken = usableAccessToken(pair)
   if (!accessToken) {
-    throw new HttpError(401, { trace_id: "", code: "UNAUTHORIZED", message: "未登录", detail: null }, null)
+    throw new HttpError(400, { trace_id: "", code: "INVALID_TOKEN", message: "登录失败", detail: null }, null)
   }
   session.setAccessToken(accessToken)
 }

@@ -39,7 +39,9 @@ function fallbackError(response: Response): HttpError {
 export function usableAccessToken(body: unknown): string | null {
   if (typeof body !== "object" || body === null || !("access_token" in body)) return null
   const token = body.access_token
-  return typeof token === "string" && token.length > 0 ? token : null
+  if (typeof token !== "string") return null
+  const trimmed = token.trim()
+  return trimmed.length > 0 ? trimmed : null
 }
 
 async function readError(response: Response): Promise<HttpError> {
@@ -75,8 +77,7 @@ export function createApiClient(options: {
     const startedToken = options.token.getAccessToken()
     refreshing = (async () => {
       const response = await fetchFn(REFRESH_PATH, { method: "POST", credentials: "include" })
-      if (!response.ok) {
-        const error = await readError(response)
+      const settleRefreshFailure = async (error: HttpError): Promise<never> => {
         const epoch = options.token.getEpoch?.()
         const current = options.token.getAccessToken()
         if ((startedEpoch !== undefined && epoch !== startedEpoch) || current !== startedToken || error.status !== 401) {
@@ -85,9 +86,10 @@ export function createApiClient(options: {
         await invalidate()
         throw error
       }
+      if (!response.ok) return settleRefreshFailure(await readError(response))
       const accessToken = usableAccessToken(await response.json())
       if (!accessToken) {
-        throw new HttpError(401, { trace_id: "", code: "UNAUTHORIZED", message: "未登录", detail: null }, null)
+        return settleRefreshFailure(new HttpError(401, { trace_id: "", code: "UNAUTHORIZED", message: "未登录", detail: null }, null))
       }
       const epoch = options.token.getEpoch?.()
       const current = options.token.getAccessToken()

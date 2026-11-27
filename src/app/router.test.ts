@@ -1,6 +1,7 @@
 import { createPinia, setActivePinia } from "pinia"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { MenuNode } from "@/menus/types"
+import { clearNavigationNotice, navigationNotice } from "@/app/navigationNotice"
 import { router } from "@/app/router"
 import { useSessionStore } from "@/auth/session"
 
@@ -105,6 +106,7 @@ describe("router beforeEach", () => {
     apiState.refreshHold = null
     apiState.menuHold = null
     setActivePinia(createPinia())
+    clearNavigationNotice()
     useSessionStore().setAccessToken("token")
   })
 
@@ -377,11 +379,17 @@ describe("router beforeEach", () => {
       apiState.meCalls = 0
       apiState.menuCalls = 0
       await expect(router.push("/asset/device")).rejects.toMatchObject({ status, message: "暂时不可用" })
+      expect(navigationNotice.value).toEqual({
+        message: "暂时不可用",
+        retryAfter: status === 429 ? "12" : null,
+      })
       expect(router.currentRoute.value.path).toBe("/login")
       expect(useSessionStore().getAccessToken()).toBeNull()
       expect(apiState.meCalls).toBe(0)
       expect(apiState.menuCalls).toBe(0)
     }
+    await router.push({ path: "/login", query: { ready: "1" } })
+    expect(navigationNotice.value).toBeNull()
   })
 
   // Value: protects=a second navigation during menu install waits for the same install; fails_when=each guard calls addRoute and the profile is requested twice; why_new=router tests only navigate after the previous guard has settled; seam=none; no_claim=the menu payload (getApi is mocked and held)
