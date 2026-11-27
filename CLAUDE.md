@@ -135,6 +135,8 @@ View → composable / TanStack Query → getApi().request → maintenance-admin
 
 `setAccessToken` 在令牌身份变化时清空权限并通知路由拆掉已安装菜单。刷新成功用 `rotateAccessToken`，避免把同一次会话的菜单拆掉。
 
+壳顶栏「退出」走 `Shell` 的 `leave()`：先 `getApi().whenSettled()` 等待进行中的刷新结束。没有访问令牌时不请求 `logout`，直接 `handleUnauthorized`。刷新结束后用 `accessTokenSubject` 比对是否仍是同一账号；账号已变时只清本地会话，不 `POST /api/v1/auth/logout`。仍是同一账号时 `POST /api/v1/auth/logout`（`skipRefresh: true`）；若返回 `401` 再刷新一次，且仍为同一账号时重试 `logout`。进行中再次点击不会重复发送。非 `401` 的失败留在当前页并展示服务端 `message` 或「暂时不可用」，不清会话。
+
 菜单可见只决定导航。接口仍由后端鉴权。按钮用 `useSessionStore().hasPermission(code)` 决定显示。权限码来自 `GET /api/v1/users/me` 的 `permissions`。
 
 ### 菜单路由
@@ -217,6 +219,7 @@ View → composable / TanStack Query → getApi().request → maintenance-admin
 | --- | --- |
 | `POST /api/v1/auth/login` | 登录。`skipRefresh: true`，成功后 `setAccessToken` |
 | `POST /api/v1/auth/refresh` | 用 cookie 换访问令牌 |
+| `POST /api/v1/auth/logout` | 退出。`skipRefresh: true`；仅同一账号时由 `leave()` 调用 |
 | `GET /api/v1/users/me` | 当前用户权限码 |
 | `GET /api/v1/users/me/menus` | 侧栏和动态路由 |
 
@@ -232,7 +235,7 @@ View → composable / TanStack Query → getApi().request → maintenance-admin
 - 环境是 `happy-dom`，配置在 `vite.config.ts` 的 `test` 字段，没有单独的 `vitest.config.ts`
 - 用假的接口客户端。浏览器联调不是本轮完成条件
 
-已经覆盖的行为：行号窗口的默认值、手输区间、贴边缩短、超限不发请求；客户端附带令牌、401 只刷新一次、刷新失败进入登录页；菜单目录、隐藏页和未知组件；登录与会话身份变化。
+已经覆盖的行为：行号窗口的默认值、手输区间、贴边缩短、超限不发请求；客户端附带令牌、401 只刷新一次、刷新失败进入登录页；菜单目录、隐藏页和未知组件；登录与会话身份变化；退出等待刷新、同一账号才请求 `logout`、无令牌与进行中重复点击。
 
 后续页面继续用假客户端补规格第 9 节：工作线已选业务只读、清空绑定前确认；设备只能登记预览中的未登记项、换址必须填写原因并确认；409 后重新读取，未保存修改仍然保留。
 

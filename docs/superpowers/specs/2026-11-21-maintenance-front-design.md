@@ -39,7 +39,7 @@
 | 表格 | TanStack Table，经 shadcn Data Table 使用 |
 | 表单 | vee-validate、zod |
 
-开发时 Vite 将 `/api` 代理到 FastAPI。生产走现有 nginx，页面与接口同域。访问令牌只放内存。刷新令牌继续使用后端的 HttpOnly cookie。打开页面时先用 cookie 换令牌，换不到就进入登录页。
+开发时 Vite 将 `/api` 代理到 FastAPI。生产走现有 nginx，页面与接口同域。访问令牌只放内存。刷新令牌继续使用后端的 HttpOnly cookie。打开页面时先用 cookie 换令牌，换不到就进入登录页。顶栏「退出」先等待进行中的令牌刷新结束；仅当刷新后仍是同一账号时才 `POST /api/v1/auth/logout`，否则只清空本机会话并进入登录页。
 
 ## 4. 信息架构
 
@@ -102,7 +102,7 @@
 
 ### 6.4 审计
 
-可按用户、资源、资源编号、动作和时间筛选。拥有 `admin:maintenance:archive_audit` 时，当前日志页提供一次归档操作，调用 `POST /api/v1/admin/maintenance/archive-audit`，并显示归档条数。
+可按用户、资源、资源编号、动作和时间筛选。拥有 `admin:audit:read_archive` 时，当前日志页提供一次归档操作，调用 `POST /api/v1/admin/maintenance/archive-audit`，并显示归档条数。
 
 ## 7. 保存与错误
 
@@ -150,6 +150,7 @@ Pinia 不存放列表和详情。TanStack Query 的键包含资源名、`start`�
 
 - 行号窗口的默认值、手输区间、贴边缩短，以及超长窗口和超限偏移时不发请求。
 - 客户端附带令牌；`401` 后只刷新一次；刷新失败进入登录页。
+- 退出等待进行中的刷新；同一账号才请求 `logout`，换人后只清本地会话。
 - 菜单目录、隐藏页和未知组件。
 - 工作线已选业务只读；清空绑定前需要确认。
 - 设备只能登记预览中的未登记项；换址必须填写原因并确认。
