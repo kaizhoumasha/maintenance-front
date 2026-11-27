@@ -451,8 +451,8 @@ describe("Shell", () => {
     whenSettled.mockReset()
     whenSettled.mockImplementation(
       () =>
-        new Promise<void>((resolve) => {
-          release = () => resolve()
+        new Promise<undefined>((resolve) => {
+          release = () => resolve(undefined)
         }),
     )
 
