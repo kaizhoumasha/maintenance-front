@@ -315,18 +315,41 @@ describe("router beforeEach", () => {
   })
 
   it("keeps the session when menu install sees a non-401 error and still clears on 401", async () => {
-    await router.push("/")
-    expect(router.currentRoute.value.path).toBe("/")
+    await router.push("/login")
+    expect(router.currentRoute.value.path).toBe("/login")
     useSessionStore().setAccessToken(null)
     useSessionStore().setAccessToken("token")
     apiState.meStatus = 429
     await expect(router.push("/asset/device")).rejects.toMatchObject({ status: 429 })
     expect(useSessionStore().getAccessToken()).toBe("token")
-    expect(router.currentRoute.value.path).toBe("/")
+    expect(router.currentRoute.value.path).toBe("/login")
 
     apiState.meStatus = 401
     await router.push("/asset/device")
     expect(useSessionStore().getAccessToken()).toBeNull()
     expect(router.currentRoute.value.path).toBe("/login")
+  })
+
+  // Value: protects=opening the shell lands on the first visible menu instead of an empty content area; fails_when=the guard leaves the address on / after menus install; why_new=router tests open /asset/device directly or expect / to stay blank; seam=none; no_claim=the login form (navigation is the router guard)
+  it("opens the first visible menu when the address is the shell", async () => {
+    await router.push("/")
+    expect(router.currentRoute.value.path).toBe("/asset/device")
+    expect(router.currentRoute.value.name).toBe("AssetDevice")
+  })
+
+  // Value: protects=a menu with no visible item stays on the shell; fails_when=the landing redirect loops or sends the visitor to a hidden path; why_new=the landing test always has a visible device page; seam=none; no_claim=the menu payload (menus are stubbed)
+  it("stays on the shell when every menu item is hidden", async () => {
+    apiState.menus = [
+      {
+        name: "HiddenOnly",
+        path: "/hidden",
+        component: "system/user/index",
+        meta: { title: "隐藏", hidden: true },
+      },
+    ]
+    useSessionStore().setAccessToken("hidden-user")
+    await router.push("/")
+    expect(router.currentRoute.value.path).toBe("/")
+    expect(router.currentRoute.value.name).toBe("Root")
   })
 })

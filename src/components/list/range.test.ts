@@ -69,4 +69,12 @@ describe("row range", () => {
     expect(applyDraft({ start: 1, end: 20 }, { start: "1", end: "30" }, 25)).toEqual({ start: 1, end: 25 })
     expect(applyDraft({ start: 1, end: 20 }, { start: "30", end: "40" }, 25)).toEqual({ start: 25, end: 25 })
   })
+
+  // Value: protects=an empty list does not move to a later window or produce an end of 0; fails_when=nextWindow treats total 0 as a numeric end and applyDraft accepts 21-40; why_new=window tests only use a positive total; seam=none; no_claim=the list request (pure function)
+  it("stays on the current window when the list has no rows", () => {
+    expect(nextWindow({ start: 1, end: 20 }, 0)).toEqual({ start: 1, end: 20 })
+    expect(nextWindow({ start: 21, end: 40 }, 0)).toEqual({ start: 21, end: 40 })
+    expect(canRequest(nextWindow({ start: 1, end: 20 }, 0))).toBe(true)
+    expect(applyDraft(DEFAULT_RANGE, { start: "21", end: "40" }, 0)).toEqual(DEFAULT_RANGE)
+  })
 })

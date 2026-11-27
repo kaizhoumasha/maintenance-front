@@ -41,6 +41,14 @@ export function sidebarSections(routes: readonly SidebarRoute[]): SidebarSection
   return sections
 }
 
+export function firstVisibleMenuPath(routes: readonly SidebarRoute[]): string | null {
+  for (const section of sidebarSections(routes)) {
+    const item = section.items[0]
+    if (item) return item.to
+  }
+  return null
+}
+
 function isDirectChild(parent: string, child: string) {
   const prefix = `${parent}/`
   return child.startsWith(prefix) && !child.slice(prefix.length).includes("/")

@@ -13,4 +13,15 @@ describe("RangePager", () => {
     expect(wrapper.emitted("change")).toHaveLength(1)
     expect(wrapper.text()).toContain("共 45 条")
   })
+
+  // Value: protects=an empty list keeps the current window and does not offer a next page; fails_when=a later draft is emitted or the next control stays enabled; why_new=the pager test only mounts a total of 45; seam=none; no_claim=the address bar (the pager emits the next range)
+  it("keeps the current window when the list has no rows", async () => {
+    const wrapper = mount(RangePager, { props: { range: { start: 1, end: 20 }, total: 0 } })
+    expect(wrapper.get("[data-testid=next-window]").attributes("disabled")).toBe("")
+    await wrapper.get("[data-testid=range-start]").setValue("21")
+    await wrapper.get("[data-testid=range-end]").setValue("40")
+    await wrapper.get("[data-testid=range-end]").trigger("blur")
+    expect(wrapper.emitted("change")).toBeUndefined()
+    expect(wrapper.text()).toContain("共 0 条")
+  })
 })

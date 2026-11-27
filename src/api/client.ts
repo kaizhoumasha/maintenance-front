@@ -1,4 +1,4 @@
-import type { ErrorBody, TokenPair } from "@/api/types"
+import type { ErrorBody } from "@/api/types"
 
 export type { ErrorBody }
 
@@ -34,6 +34,12 @@ function fallbackError(response: Response): HttpError {
     },
     response.headers.get("retry-after"),
   )
+}
+
+function usableAccessToken(body: unknown): string | null {
+  if (typeof body !== "object" || body === null || !("access_token" in body)) return null
+  const token = body.access_token
+  return typeof token === "string" && token.length > 0 ? token : null
 }
 
 async function readError(response: Response): Promise<HttpError> {
@@ -79,19 +85,22 @@ export function createApiClient(options: {
         await invalidate()
         throw error
       }
-      const pair = (await response.json()) as TokenPair
+      const accessToken = usableAccessToken(await response.json())
+      if (!accessToken) {
+        throw new HttpError(401, { trace_id: "", code: "UNAUTHORIZED", message: "未登录", detail: null }, null)
+      }
       const epoch = options.token.getEpoch?.()
       const current = options.token.getAccessToken()
       if ((startedEpoch !== undefined && epoch !== startedEpoch) || current !== startedToken) {
         await fetchFn(LOGOUT_PATH, {
           method: "POST",
           credentials: "include",
-          headers: { authorization: `Bearer ${pair.access_token}` },
+          headers: { authorization: `Bearer ${accessToken}` },
         }).catch(() => undefined)
         throw clearedSession()
       }
-      options.token.setAccessToken(pair.access_token)
-      return pair.access_token
+      options.token.setAccessToken(accessToken)
+      return accessToken
     })().finally(() => {
       refreshing = null
     })

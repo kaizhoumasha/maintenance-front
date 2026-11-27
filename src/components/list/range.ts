@@ -30,7 +30,7 @@ export function applyDraft(current: RowRange, draft: { start: string; end: strin
   const start = parseDraft(draft.start)
   const end = parseDraft(draft.end)
   if (start === null || end === null || start > end) return current
-  if (!canRequest({ start, end })) return current
+  if (!canRequest({ start, end }) || total < 1) return current
   let next = { start, end }
   if (total >= 1 && next.end > total) next = { ...next, end: total }
   if (total >= 1 && next.start > total) next = { ...next, start: total }
@@ -46,7 +46,7 @@ export function previousWindow(range: RowRange): RowRange {
 }
 
 export function nextWindow(range: RowRange, total: number): RowRange {
-  if (range.end >= total) return range
+  if (total < 1 || range.end >= total) return range
   const length = windowLength(range)
   if (total - range.end < length) return { start: range.end + 1, end: total }
   return { start: range.start + length, end: range.end + length }

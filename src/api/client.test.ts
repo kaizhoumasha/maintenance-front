@@ -515,4 +515,19 @@ describe("api client", () => {
       vi.unstubAllGlobals()
     }
   })
+
+  // Value: protects=a 200 refresh without a usable access_token leaves the current token untouched and fails once; fails_when=the body is cast to TokenPair and a missing token is stored, so a caller with no token refreshes forever; why_new=refresh tests only return a string access_token; seam=none; no_claim=the refresh cookie (fetch is mocked)
+  it("rejects a refresh body that has no usable access token and does not store it", async () => {
+    for (const body of [{ token_type: "bearer" }, { access_token: "", token_type: "bearer" }, { access_token: null }, { access_token: 1 }]) {
+      const token = source("old")
+      const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input).endsWith("/auth/refresh")) return json(200, body)
+        return json(401, { trace_id: "t", code: "UNAUTHORIZED", message: "未登录", detail: null })
+      })
+      const client = createApiClient({ fetchFn, token })
+      await expect(client.request("/api/v1/users")).rejects.toBeInstanceOf(HttpError)
+      expect(token.getAccessToken()).toBe("old")
+      expect(fetchFn.mock.calls.filter((call) => String(call[0]).endsWith("/auth/refresh"))).toHaveLength(1)
+    }
+  })
 })

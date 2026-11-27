@@ -47,4 +47,21 @@ describe("useRowRange", () => {
 
     expect(router.currentRoute.value.query).toEqual({ start: "5", end: "10", filter: "open" })
   })
+
+  // Value: protects=a shared link keeps its window, and a later filter change returns to rows 1 through 20; fails_when=the composable resets on load or leaves the old window after the filter query changes; why_new=useRowRange tests only reset when the button calls resetRange; seam=none; no_claim=a list request (asserts the route query)
+  it("keeps a shared window and returns to the default when the filter changes", async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: "/", component: Probe }],
+    })
+    await router.push("/?start=21&end=40&filter=open")
+    const wrapper = mount(Probe, { global: { plugins: [router] } })
+    expect(wrapper.text()).toBe("21-40")
+
+    await router.push({ query: { start: "21", end: "40", filter: "closed" } })
+    await flushPromises()
+
+    expect(router.currentRoute.value.query).toEqual({ start: "1", end: "20", filter: "closed" })
+    expect(wrapper.text()).toBe("1-20")
+  })
 })

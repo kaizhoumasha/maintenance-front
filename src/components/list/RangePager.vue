@@ -30,6 +30,6 @@ function commit() {
     <input data-testid="range-end" aria-label="结束行" v-model="end" class="w-14 border-0 border-b border-rule bg-transparent text-center text-ink" @blur="commit" @keydown.enter="commit" />
     <span>共 {{ total }} 条</span>
     <button type="button" class="text-ink disabled:opacity-40" data-testid="previous-window" :disabled="range.start <= 1" @click="emit('change', previousWindow(range))">上一窗</button>
-    <button type="button" class="text-ink disabled:opacity-40" data-testid="next-window" :disabled="range.end >= total" @click="emit('change', nextWindow(range, total))">下一窗</button>
+    <button type="button" class="text-ink disabled:opacity-40" data-testid="next-window" :disabled="total < 1 || range.end >= total" @click="emit('change', nextWindow(range, total))">下一窗</button>
   </div>
 </template>

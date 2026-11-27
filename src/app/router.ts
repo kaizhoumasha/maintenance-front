@@ -1,6 +1,7 @@
-import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router"
+import { createRouter, createWebHistory, type RouteLocationNormalized, type RouteRecordRaw } from "vue-router"
 import { HttpError } from "@/api/client"
 import { getApi } from "@/app/api"
+import { firstVisibleMenuPath } from "@/app/sidebar"
 import { onAccessTokenIdentityChange, useSessionStore } from "@/auth/session"
 import { compileMenus } from "@/menus/compile"
 import type { MenuNode } from "@/menus/types"
@@ -67,11 +68,20 @@ export async function installMenus() {
   }
 }
 
+function shellLanding(to: RouteLocationNormalized): string | null {
+  const onlyShell = to.name === "Root" || (to.matched.length === 1 && to.matched[0]?.name === "Root")
+  if (!onlyShell) return null
+  const landing = firstVisibleMenuPath(router.getRoutes())
+  return landing && landing !== to.path ? landing : null
+}
+
 router.beforeEach(async (to) => {
   if (to.meta.public) return true
   const menusWereInstalled = installed
   await installMenus()
   if (!useSessionStore().getAccessToken()) return { path: "/login" }
+  const landing = shellLanding(to)
+  if (landing) return landing
   if (!menusWereInstalled && installed) return to.fullPath
   return true
 })
